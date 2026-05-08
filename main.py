@@ -4,6 +4,8 @@ import json
 import os
 import sys
 import shutil
+import csv
+import io
 from rich.prompt import Prompt
 
 from client.formbricks import FormbricksClient, FormbricksError
@@ -160,6 +162,100 @@ def cmd_set_status(client, env, survey_id, status):
     console.print(f"[green]Status set to '{status}'[/green]")
 
 
+# ---- Evaluation commands ----
+
+def cmd_eval_template(client, env, survey_id, output):
+    from eval.grader import load_answer_key, grade_response
+    survey = client.get_survey(survey_id)
+    questions = survey.get("questions", [])
+    if not questions:
+        for block in survey.get("blocks", []):
+            questions.extend(block.get("elements", []))
+    template = {}
+    for q in questions:
+        qid = q.get("id", "")
+        if not qid:
+            continue
+        qtype = q.get("type", "openText")
+        entry = {"correct": None, "points": 1, "explanation": ""}
+        if qtype in ("multipleChoiceSingle",):
+            choices = q.get("choices", [])
+            entry["correct"] = choices[0]["id"] if choices else None
+            entry["choices"] = {c["id"]: (c.get("label", {}) or {}).get("default", c["id"]) for c in choices}
+        elif qtype in ("multipleChoiceMulti",):
+            choices = q.get("choices", [])
+            entry["correct"] = [choices[0]["id"]] if choices else []
+            entry["choices"] = {c["id"]: (c.get("label", {}) or {}).get("default", c["id"]) for c in choices}
+        elif qtype in ("nps", "rating"):
+            entry["correct"] = None
+        else:
+            entry["type"] = "review"
+            entry["correct"] = None
+        template[qid] = entry
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(template, f, indent=2, ensure_ascii=False)
+    log_ok(f"Template saved to {output}")
+    console.print(f"  Questions: {len(template)}")
+    show_json(template)
+
+
+def cmd_eval_grade(client, env, survey_id, answer_key_path, fmt, output):
+    from eval.grader import load_answer_key, grade_all, export_csv, export_json
+    log_ok("Loading answer key")
+    answer_key = load_answer_key(answer_key_path)
+    log_ok(f"Fetching responses for survey {survey_id}")
+    responses = client.get_responses(survey_id)
+    log_ok(f"Grading {len(responses)} responses")
+    results = grade_all(responses, answer_key)
+    if fmt == "csv":
+        survey = client.get_survey(survey_id)
+        out = export_csv(results, survey.get("name", "evaluation"))
+    else:
+        out = export_json(results)
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(out)
+        log_ok(f"Results saved to {output}")
+    else:
+        console.print(out)
+
+
+def cmd_eval_export(client, env, survey_id, output):
+    import csv, io
+    log_ok(f"Fetching responses for survey {survey_id}")
+    responses = client.get_responses(survey_id)
+    log_ok(f"Exporting {len(responses)} responses")
+    if not responses:
+        log_error("No responses found")
+        return
+    # Build CSV from raw response data
+    all_keys = set()
+    for r in responses:
+        data = r.get("data", {})
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        all_keys.update(data.keys())
+    sorted_keys = sorted(all_keys)
+    fieldnames = ["response_id", "person_id"] + sorted_keys
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    for r in responses:
+        data = r.get("data", {})
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        row = {"response_id": r.get("id", ""), "person_id": r.get("personId", "") or (r.get("person", {}) or {}).get("id", "")}
+        row.update({k: data.get(k, "") for k in sorted_keys})
+        writer.writerow(row)
+    out = buf.getvalue()
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(out)
+        log_ok(f"Exported to {output}")
+    else:
+        console.print(out)
+
+
 # ---- Interactive mode ----
 
 def interactive_mode(config):
@@ -270,6 +366,24 @@ def main():
 
     p_serve = sub.add_parser("serve", help="Start Web UI (Flask server)")
 
+    # Evaluation subcommands
+    p_eval = sub.add_parser("eval", help="Evaluation commands")
+    eval_sub = p_eval.add_subparsers(dest="eval_command")
+
+    p_et = eval_sub.add_parser("template", help="Generate answer key template from survey")
+    p_et.add_argument("survey_id")
+    p_et.add_argument("--output", "-o", default="answer_key.json")
+
+    p_eg = eval_sub.add_parser("grade", help="Grade responses against answer key")
+    p_eg.add_argument("survey_id")
+    p_eg.add_argument("answer_key")
+    p_eg.add_argument("--format", choices=["json", "csv"], default="json")
+    p_eg.add_argument("--output", "-o", help="Output file")
+
+    p_ee = eval_sub.add_parser("export", help="Export responses as CSV")
+    p_ee.add_argument("survey_id")
+    p_ee.add_argument("--output", "-o", help="Output CSV file")
+
     args = parser.parse_args()
     config = load_config(args.config)
 
@@ -317,7 +431,6 @@ def main():
             responses = client.get_responses(args.survey_id)
             show_json({"data": responses})
         elif args.command == "serve":
-            # Kill any existing Flask on the same port
             import subprocess
             try:
                 subprocess.run(["pkill", "-f", "python web/app.py"], capture_output=True)
@@ -325,6 +438,15 @@ def main():
                 pass
             from web.app import main as web_main
             web_main()
+        elif args.command == "eval":
+            if args.eval_command == "template":
+                cmd_eval_template(client, env, args.survey_id, args.output)
+            elif args.eval_command == "grade":
+                cmd_eval_grade(client, env, args.survey_id, args.answer_key, args.format, args.output)
+            elif args.eval_command == "export":
+                cmd_eval_export(client, env, args.survey_id, args.output)
+            else:
+                console.print("[red]Usage: eval {template|grade|export}[/red]")
     except FormbricksError as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)

@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, Response
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.formbricks import FormbricksClient, FormbricksError
@@ -601,6 +601,90 @@ def api_fix_survey():
         from ui.tui import validate_survey_draft
         fixed = validate_survey_draft(data, silent=True)
         return jsonify(fixed)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/eval/template/<survey_id>")
+def api_eval_template(survey_id):
+    env = request.args.get("env")
+    try:
+        client, _ = get_client(env)
+        survey = client.get_survey(survey_id)
+        questions = survey.get("questions", [])
+        if not questions:
+            for block in survey.get("blocks", []):
+                questions.extend(block.get("elements", []))
+        template = {}
+        for q in questions:
+            qid = q.get("id", "")
+            if not qid:
+                continue
+            qtype = q.get("type", "openText")
+            entry = {"correct": None, "points": 1, "explanation": ""}
+            choices = q.get("choices", [])
+            if choices:
+                entry["choices"] = {c["id"]: (c.get("label", {}) or {}).get("default", c["id"]) for c in choices}
+            if qtype in ("multipleChoiceSingle",):
+                entry["correct"] = choices[0]["id"] if choices else None
+            elif qtype in ("multipleChoiceMulti",):
+                entry["correct"] = [choices[0]["id"]] if choices else []
+            elif qtype in ("openText",):
+                entry["type"] = "review"
+            template[qid] = entry
+        return jsonify(template)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/eval/grade/<survey_id>", methods=["POST"])
+def api_eval_grade(survey_id):
+    env = request.args.get("env")
+    fmt = request.args.get("format", "json")
+    body = request.get_json()
+    if not body or "answer_key" not in body:
+        return jsonify({"error": "answer_key required in body"}), 400
+    try:
+        from eval.grader import load_answer_key, grade_all, export_csv, export_json
+        client, _ = get_client(env)
+        answer_key = body["answer_key"]
+        responses = client.get_responses(survey_id)
+        results = grade_all(responses, answer_key)
+        if fmt == "csv":
+            survey = client.get_survey(survey_id)
+            out = export_csv(results, survey.get("name", "evaluation"))
+            return Response(out, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=evaluation.csv"})
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/eval/export/<survey_id>")
+def api_eval_export(survey_id):
+    env = request.args.get("env")
+    try:
+        import csv, io
+        client, _ = get_client(env)
+        responses = client.get_responses(survey_id)
+        all_keys = set()
+        for r in responses:
+            data = r.get("data", {})
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
+            all_keys.update(data.keys())
+        sorted_keys = sorted(all_keys)
+        fieldnames = ["response_id", "person_id"] + sorted_keys
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in responses:
+            data = r.get("data", {})
+            if isinstance(data, dict) and "data" in data:
+                data = data["data"]
+            row = {"response_id": r.get("id", ""), "person_id": r.get("personId", "") or (r.get("person", {}) or {}).get("id", "")}
+            row.update({k: data.get(k, "") for k in sorted_keys})
+            writer.writerow(row)
+        return Response(buf.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=responses.csv"})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

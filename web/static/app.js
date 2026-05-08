@@ -44,6 +44,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('import-fix-btn').addEventListener('click', fixAndLoadJSON);
   document.getElementById('import-file-input').addEventListener('change', handleFileImport);
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('eval-export-btn').addEventListener('click', evalExport);
+  document.getElementById('eval-template-btn').addEventListener('click', evalDownloadTemplate);
+  document.getElementById('eval-grade-btn').addEventListener('click', evalGrade);
+  document.getElementById('eval-load-key-btn').addEventListener('click', () => document.getElementById('eval-key-input').click());
+  document.getElementById('eval-key-input').addEventListener('change', evalLoadKeyFile);
 });
 
 /* ─── Env ─── */
@@ -909,3 +914,146 @@ function loadIntoBuilder(data) {
   };
   renderBuilder();
 }
+
+/* ─── Evaluation ─── */
+function showEvalSection() {
+  const el = document.getElementById('eval-section');
+  if (state.currentSurvey && state.currentSurvey.id) {
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function evalExport() {
+  if (!state.currentSurvey) { toast('Select a survey first', 'error'); return; }
+  const a = document.createElement('a');
+  a.href = `/api/eval/export/${state.currentSurvey.id}?env=${state.env}`;
+  a.download = `responses_${state.currentSurvey.id}.csv`;
+  a.click();
+  toast('Downloading responses CSV', 'success');
+}
+
+async function evalDownloadTemplate() {
+  if (!state.currentSurvey) { toast('Select a survey first', 'error'); return; }
+  const res = await fetch(`/api/eval/template/${state.currentSurvey.id}?env=${state.env}`);
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || 'Error', 'error'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `answer_key_${state.currentSurvey.id}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Answer key template downloaded', 'success');
+  document.getElementById('eval-answer-key').value = JSON.stringify(data, null, 2);
+}
+
+function evalLoadKeyFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    document.getElementById('eval-answer-key').value = ev.target.result;
+    toast('Answer key loaded', 'success');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+async function evalGrade() {
+  if (!state.currentSurvey) { toast('Select a survey first', 'error'); return; }
+  const raw = document.getElementById('eval-answer-key').value.trim();
+  if (!raw) { toast('Paste an answer key first', 'error'); return; }
+  let answerKey;
+  try { answerKey = JSON.parse(raw); } catch(e) { toast('Invalid JSON in answer key', 'error'); return; }
+
+  const res = await fetch(`/api/eval/grade/${state.currentSurvey.id}?env=${state.env}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answer_key: answerKey }),
+  });
+  const results = await res.json();
+  if (!res.ok) { toast(results.error || 'Grade failed', 'error'); return; }
+
+  renderEvalResults(results);
+  toast(`Graded ${results.length} responses`, 'success');
+}
+
+function renderEvalResults(results) {
+  const el = document.getElementById('eval-results');
+  if (!results.length) {
+    el.innerHTML = '<div style="color:var(--text2);font-size:13px">No responses to grade.</div>';
+    el.style.display = 'block';
+    return;
+  }
+
+  const total = results.length;
+  const avgPct = results.reduce((s, r) => s + (r.percentage || 0), 0) / total;
+  const qids = results[0].questions ? Object.keys(results[0].questions) : [];
+
+  let html = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="stat-box"><strong>${total}</strong><br><span>Responses</span></div>
+      <div class="stat-box"><strong>${avgPct.toFixed(1)}%</strong><br><span>Avg Score</span></div>
+    </div>
+    <div style="max-height:400px;overflow:auto">
+    <table style="width:100%;font-size:11px;border-collapse:collapse">
+      <thead>
+        <tr style="background:var(--surface2);position:sticky;top:0">
+          <th style="padding:6px 8px;text-align:left">Response</th>
+          <th style="padding:6px 8px;text-align:left">Person</th>
+          <th style="padding:6px 8px;text-align:center">Score</th>
+          ${qids.map(q => `<th style="padding:6px 8px;text-align:left">${esc(q)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  results.forEach(r => {
+    const status = r.percentage >= 80 ? '🟢' : r.percentage >= 50 ? '🟡' : '🔴';
+    html += `<tr style="border-bottom:1px solid var(--border)">`;
+    html += `<td style="padding:6px 8px">${esc(r.response_id.slice(0, 12))}…</td>`;
+    html += `<td style="padding:6px 8px">${esc(r.person_id.slice(0, 12)) || '—'}</td>`;
+    html += `<td style="padding:6px 8px;text-align:center">${status} ${r.score}/${r.max_score} (${r.percentage}%)</td>`;
+    qids.forEach(qid => {
+      const q = r.questions[qid] || {};
+      const st = q.status === 'correct' ? '🟢' : q.status === 'incorrect' ? '🔴' : '⚪';
+      html += `<td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${esc(q.reason || '')}">${st} ${esc(String(q.given || '').slice(0, 30))}</td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `
+      </tbody>
+    </table>
+    </div>
+    <div class="btn-group" style="margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="evalDownloadResults()">⬇ Download JSON</button>
+    </div>
+  `;
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+  window.__evalResults = results;
+}
+
+function evalDownloadResults() {
+  const data = window.__evalResults;
+  if (!data) { toast('No results to download', 'error'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = state.currentSurvey ? state.currentSurvey.name : 'evaluation';
+  a.download = `${name}_results.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Results downloaded', 'success');
+}
+
+// Patch loadSurvey to show eval section after loading
+const _origLoadSurvey = loadSurvey;
+loadSurvey = async function(id) {
+  await _origLoadSurvey(id);
+  showEvalSection();
+};

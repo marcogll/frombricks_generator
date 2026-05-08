@@ -344,3 +344,15 @@ footer .footer-title { font-weight: 600; color: var(--text); }
 footer .footer-sep { color: var(--border); }
 footer .footer-sub { }
 footer .footer-copy { font-size: 10px; opacity: .6; }
+
+/* ─── Evaluation ─── */
+.stat-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 80px;
+}
+.stat-box strong { font-size: 18px; display: block; }
+.stat-box span { font-size: 11px; color: var(--text2); }

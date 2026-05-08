@@ -130,6 +130,26 @@
       <div id="advanced-section" style="display:none"></div>
     </div>
 
+    <!-- Evaluation -->
+    <div class="builder-section" id="eval-section" style="display:none">
+      <h3>📊 Evaluation</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Grade responses against an answer key, or export raw responses as CSV.</p>
+      <div class="btn-group" style="margin-bottom:10px">
+        <button class="btn btn-secondary btn-sm" id="eval-export-btn">📥 Export Responses CSV</button>
+        <button class="btn btn-secondary btn-sm" id="eval-template-btn">📄 Download Answer Key Template</button>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <label style="font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px">📝 Grade with Answer Key</label>
+        <textarea id="eval-answer-key" placeholder='Paste answer key JSON here…' style="width:100%;height:140px;background:var(--bg-deeper);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:monospace;font-size:11px;resize:vertical"></textarea>
+        <div class="btn-group">
+          <button class="btn btn-primary btn-sm" id="eval-grade-btn">🔍 Grade</button>
+          <button class="btn btn-secondary btn-sm" id="eval-load-key-btn">📂 Upload Key</button>
+          <input type="file" id="eval-key-input" accept=".json" style="display:none">
+        </div>
+      </div>
+      <div id="eval-results" style="margin-top:10px;display:none"></div>
+    </div>
+
   </div>
 
   <!-- RIGHT: JSON Preview -->

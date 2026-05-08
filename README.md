@@ -16,6 +16,7 @@
   <img src="https://img.shields.io/badge/Flask-Web_UI-3a3a3a?style=flat-square" alt="Flask Web UI">
   <img src="https://img.shields.io/badge/Catppuccin-Theme-3a3a3a?style=flat-square" alt="Catppuccin Theme">
   <img src="https://img.shields.io/badge/CLI-Headless-3a3a3a?style=flat-square" alt="CLI Headless">
+  <img src="https://img.shields.io/badge/Docker-Ready-3a3a3a?style=flat-square" alt="Docker Ready">
 </p>
 
 ---
@@ -80,6 +81,31 @@ Each environment can optionally belong to a **group** (app name) and have an **e
 ```
 
 The Web UI groups environments by `group` using `<optgroup>` selectors. The TUI shows the group + env_type label.
+
+---
+
+## Docker
+
+```bash
+# Build the image
+docker build -t formbricks-studio .
+
+# Run with your config mounted
+docker run -d \
+  --name formbricks-studio \
+  -p 8080:8080 \
+  -v /path/to/config.json:/app/config.json \
+  formbricks-studio
+```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+| Env | Description |
+|-----|-------------|
+| `PORT` | Port (default `8080`) |
+| `FLASK_DEBUG` | Set to `1` for debug mode |
+
+> **Note**: The CLI/TUI commands (list, create, etc.) are only available when running outside Docker, since they need a terminal. Docker runs the Web UI only.
 
 ---
 

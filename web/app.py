@@ -607,8 +607,9 @@ def api_fix_survey():
 
 def main():
     port = int(os.environ.get("PORT", 8080))
-    print(f"Web UI at http://localhost:{port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    print(f"Web UI at http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=debug)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formbricks Survey Builder</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div style="display:flex;align-items:center;gap:12px">
+    <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" alt="Soul23" style="height:28px">
+    <div>
+      <h1>Formbricks Studio</h1>
+      <div class="subtitle">Survey Builder — drag-free visual editor</div>
+    </div>
+  </div>
+  <div class="env-bar">
+    <label style="font-size:12px;color:var(--text2)">Environment:</label>
+    <select id="env-select"></select>
+    <button class="btn btn-secondary btn-sm" id="new-survey-btn">+ New Survey</button>
+    <button class="btn btn-secondary btn-sm" id="templates-btn">📦 Templates</button>
+    <button class="btn btn-primary btn-sm" id="save-survey-btn">💾 Save</button>
+    <button class="btn btn-secondary btn-sm" id="download-json-btn">⬇ JSON</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- LEFT: Survey List -->
+  <div class="panel">
+    <h2>Surveys</h2>
+    <div id="survey-list"><div class="loading">Loading surveys</div></div>
+  </div>
+
+  <!-- CENTER: Builder -->
+  <div class="panel">
+    <h2>Survey Builder</h2>
+
+    <!-- Basic info -->
+    <div class="builder-section">
+      <h3>⚙️ Basic Settings</h3>
+      <div class="form-row">
+        <label>Survey Name</label>
+        <input id="survey-name" oninput="state.builder.name=this.value;renderJSON()">
+      </div>
+      <div class="form-row-inline">
+        <div class="form-row" style="flex:1">
+          <label>Type</label>
+          <select id="survey-type" onchange="state.builder.type=this.value;renderJSON()">
+            <option value="link">Link Survey</option>
+            <option value="app">App Survey</option>
+          </select>
+        </div>
+        <div class="form-row" style="flex:1">
+          <label>Status</label>
+          <select id="survey-status" onchange="state.builder.status=this.value;renderJSON()">
+            <option value="draft">Draft</option>
+            <option value="inProgress">In Progress</option>
+            <option value="paused">Paused</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <div class="form-row" style="flex:1">
+          <label>Display</label>
+          <select id="display-option" onchange="state.builder.displayOption=this.value;renderJSON()">
+            <option value="displayOnce">Once</option>
+            <option value="displayMultiple">Multiple</option>
+            <option value="respondOnce">Respond Once</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Welcome Card -->
+    <div class="builder-section">
+      <h3 class="toggle-header" onclick="toggleSection('welcome-section')">👋 Welcome Card</h3>
+      <div id="welcome-section"></div>
+    </div>
+
+    <!-- Questions -->
+    <div class="builder-section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">❓ Questions</h3>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-secondary btn-sm" onclick="addQuestion('openText')">+ Text</button>
+          <button class="btn btn-secondary btn-sm" onclick="addQuestion('multipleChoiceSingle')">+ Choice</button>
+          <button class="btn btn-secondary btn-sm" onclick="addQuestion('nps')">+ NPS</button>
+          <button class="btn btn-secondary btn-sm" onclick="addQuestion('rating')">+ Rating</button>
+          <button class="btn btn-secondary btn-sm" onclick="openTemplates()">More…</button>
+        </div>
+      </div>
+      <div id="questions-section"><div style="color:var(--text2);font-size:13px">No questions yet.</div></div>
+    </div>
+
+    <!-- Question Editor -->
+    <div class="builder-section" id="question-editor-section">
+      <h3>✎ Question Editor</h3>
+      <div id="question-editor">
+        <div style="color:var(--text2);font-size:13px;padding:12px 0">Select a question to edit its details.</div>
+      </div>
+    </div>
+
+    <!-- Endings -->
+    <div class="builder-section">
+      <h3 class="toggle-header" onclick="toggleSection('endings-section')">🏁 Endings</h3>
+      <div id="endings-section"></div>
+    </div>
+
+    <!-- Advanced -->
+    <div class="builder-section">
+      <h3 class="toggle-header" onclick="toggleSection('advanced-section')">⚡ Advanced</h3>
+      <div id="advanced-section" style="display:none"></div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: JSON Preview -->
+  <div class="panel panel-right">
+    <h2>📄 JSON Preview</h2>
+    <div class="json-preview" id="json-preview">{ }</div>
+  </div>
+
+</div>
+
+<!-- Templates Modal -->
+<div class="modal-overlay" id="templates-modal">
+  <div class="modal">
+    <button class="modal-close" id="modal-close">✕</button>
+    <h2>📦 Question Templates</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Click to add a template question to your survey, or use the download button to get the raw JSON.</p>
+    <div class="template-grid" id="template-grid"></div>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">📄 Survey Structure Documentation</p>
+      <button class="btn btn-secondary btn-sm" onclick="openSurveyDocs()">👁 View in browser</button>
+      <button class="btn btn-secondary btn-sm" onclick="downloadSurveyDocs()">⬇ Download .md</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

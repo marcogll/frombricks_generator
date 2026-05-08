@@ -1,6 +1,7 @@
 /* ─── State ─── */
 let state = {
   env: '',
+  envObj: null,
   envs: [],
   surveys: [],
   currentSurvey: null,
@@ -26,7 +27,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   initSidebar();
   await loadEnvs();
   document.getElementById('env-select').addEventListener('change', (e) => {
+    const env = state.envs.find(x => x.name === e.target.value);
     state.env = e.target.value;
+    state.envObj = env || null;
+    state.currentSurvey = null;
+    newSurvey();
     loadSurveys();
   });
   document.getElementById('new-survey-btn').addEventListener('click', newSurvey);
@@ -46,8 +51,22 @@ async function loadEnvs() {
   const res = await fetch('/api/envs');
   state.envs = await res.json();
   const sel = document.getElementById('env-select');
-  sel.innerHTML = state.envs.map(e => `<option value="${e.name}">${e.label || e.name}</option>`).join('');
-  if (state.envs.length) { state.env = state.envs[0].name; loadSurveys(); }
+  const groups = {};
+  state.envs.forEach(e => {
+    const g = e.group || e.label || e.name;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(e);
+  });
+  sel.innerHTML = Object.entries(groups).map(([g, envs]) =>
+    `<optgroup label="${g}">${envs.map(e =>
+      `<option value="${e.name}">${e.env_type || 'dev'}</option>`
+    ).join('')}</optgroup>`
+  ).join('');
+  if (state.envs.length) {
+    state.env = state.envs[0].name;
+    state.envObj = state.envs[0];
+    loadSurveys();
+  }
 }
 
 /* ─── Surveys ─── */
@@ -99,6 +118,7 @@ async function loadSurvey(id) {
 
   renderSurveyList();
   renderBuilder();
+  showSurveyLinks(survey.id);
 }
 
 function newSurvey() {
@@ -564,6 +584,10 @@ function renderJSON() {
 /* ─── Save ─── */
 async function saveSurvey() {
   const json = buildSurveyJSON();
+  const isNew = !state.currentSurvey;
+
+  if (isNew && !confirm('¿Estás seguro de enviar esta encuesta a Formbricks?')) return;
+
   try {
     let res;
     if (state.currentSurvey) {
@@ -580,7 +604,22 @@ async function saveSurvey() {
     toast('Survey saved!', 'success');
     state.currentSurvey = data;
     await loadSurveys();
+    showSurveyLinks(data.id);
   } catch(e) { toast(e.message, 'error'); }
+}
+
+function showSurveyLinks(surveyId) {
+  const el = document.getElementById('survey-links');
+  const env = state.envObj;
+  if (!env || !surveyId) { el.style.display = 'none'; return; }
+  const base = env.base_url.replace(/\/+$/, '');
+  const respUrl = `${base}/s/${surveyId}`;
+  const editUrl = `${base}/environments/${env.environment_id}/surveys/${surveyId}/edit`;
+  document.getElementById('link-response').href = respUrl;
+  document.getElementById('link-response').textContent = respUrl;
+  document.getElementById('link-edit').href = editUrl;
+  document.getElementById('link-edit').textContent = editUrl;
+  el.style.display = 'block';
 }
 
 /* ─── Download ─── */

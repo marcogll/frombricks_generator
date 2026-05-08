@@ -176,7 +176,7 @@ def interactive_mode(config):
     )
 
     while True:
-        show_header(current_env["name"])
+        show_header(current_env)
         choice = show_menu()
 
         try:

@@ -1,28 +1,38 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" width="110" alt="Soul23">
+  <a href="https://soul23.mx" target="_blank">
+    <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/s23_logo.svg" width="80" alt="Soul23">
+  </a>
 </p>
-<h1 align="center">Formbricks CLI Manager</h1>
+<h1 align="center">Formbricks Studio</h1>
 <p align="center">
-  TUI/CLI tool to manage a Formbricks instance via the Management API v1/v2 🔧
+  Visual survey builder & CLI manager for <a href="https://formbricks.com">Formbricks</a> via the Management API v1/v2
+  <br>
+  <a href="https://soul23.mx"><strong>Soul23 · Grupo AlMa del Norte</strong></a>
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3a3a3a?style=flat-square" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/Formbricks-API-3a3a3a?style=flat-square" alt="Formbricks API">
   <img src="https://img.shields.io/badge/Rich-TUI-3a3a3a?style=flat-square" alt="Rich TUI">
   <img src="https://img.shields.io/badge/Flask-Web_UI-3a3a3a?style=flat-square" alt="Flask Web UI">
+  <img src="https://img.shields.io/badge/Catppuccin-Theme-3a3a3a?style=flat-square" alt="Catppuccin Theme">
   <img src="https://img.shields.io/badge/CLI-Headless-3a3a3a?style=flat-square" alt="CLI Headless">
 </p>
 
+---
+
 ## Features
 
+- **Web UI** — visual survey builder with dark/light themes (Catppuccin Frappe/Latte), collapsible sidebar, live JSON preview, template gallery, JSON import with auto-fix
 - **Interactive TUI** — menu-driven interface using Rich
-- **Headless mode** — direct commands for scripting/automation
-- **Multi-environment** — switch between envs (prod/staging/dev)
-- **Survey management** — list, create, view, edit
-- **Question management** — add questions via JSON or interactively, all types and fields
-- **Response management** — send test responses
+- **Headless CLI** — direct commands for scripting/automation
+- **Multi-environment** — grouped by app (Vanity, Soul23, Socia) with prod/dev selectors
+- **Survey management** — list, create, view, edit, clone
+- **All question types** — openText, multipleChoiceSingle/Multi, NPS, rating, date, consent, fileUpload, matrix — with full field support (IDs, headlines, subheaders, placeholders, button/back labels, shuffle, validation)
+- **Response management** — send test responses interactively or via stdin
 - **Status control** — draft, inProgress, paused, completed
-- **Web UI** — visual survey builder with live JSON preview
+- **JSON import/fix** — paste or upload JSON, auto-fills missing fields (IDs, headlines, welcome card, endings, etc.)
+- **Survey links** — view response/preview and edit URLs after saving
+- **Draft validation** — warns when welcome card is missing and prompts to add one
 
 ## Requirements
 
@@ -42,44 +52,104 @@ cp config.example.json config.json
 # Edit with your environments
 ```
 
+Each environment can optionally belong to a **group** (app name) and have an **env_type** (prod/dev):
+
 ```json
 {
   "environments": [
     {
-      "name": "production",
+      "name": "vanity",
+      "label": "Vanity",
+      "env_type": "prod",
+      "group": "Vanity",
       "base_url": "https://feedback.soul23.cloud",
       "api_key": "fbk_your_key",
       "environment_id": "env-id"
+    },
+    {
+      "name": "vanity-dev",
+      "label": "Vanity",
+      "env_type": "dev",
+      "group": "Vanity",
+      "base_url": "https://feedback.soul23.cloud",
+      "api_key": "fbk_your_key",
+      "environment_id": "env-dev-id"
     }
   ]
 }
 ```
 
+The Web UI groups environments by `group` using `<optgroup>` selectors. The TUI shows the group + env_type label.
+
 ---
 
-## CLI Reference: Creating & Editing Surveys
-
-### Create a survey with questions
-
-Build a JSON file and pipe it in:
+## Web UI
 
 ```bash
-cat survey.json | python main.py create
+python main.py serve
+# Open http://localhost:8080
 ```
 
-Or create interactively:
+### Builder panels
+
+| Panel | Description |
+|-------|-------------|
+| Left (sidebar) | Collapsible survey list — click to load any survey |
+| Center | Full builder: basic settings, welcome card, questions, endings, advanced |
+| Right | Live JSON preview |
+
+### Features
+
+- **Theme toggle** — switch between Catppuccin Frappe (dark) and Latte (light), persisted in localStorage
+- **Sidebar collapse** — click header to collapse/expand, persisted in localStorage
+- **Env selector** — grouped by app (Vanity, Soul23, Socia) with prod/dev options
+- **Survey links** — after saving or loading a survey, shows response/preview + edit URLs
+- **Save confirmation** — prompts "¿Estás seguro?" before creating a new survey
+- **JSON Import** — paste JSON or upload a file, then click "Fix & Load" to auto-fill missing fields and load into the builder
+- **Template gallery** — one-click add any question type
+- **Full question editor** — all fields: ID, headline, subheader, choices, button labels, back button, shuffle, validation, etc.
+- **Download JSON** — save survey as `.json` file
+
+### Save workflow
+
+1. Build or edit your survey
+2. Click **Save** (confirm dialog for new surveys)
+3. Survey is pushed to the selected Formbricks environment
+4. Links appear: **Edit in Formbricks** and **Response / Preview**
+
+---
+
+## CLI Reference
+
+### Interactive mode
 
 ```bash
-python main.py create --interactive
+python main.py
 ```
 
-### Add a question to an existing survey
+Menu options:
+1. List surveys
+2. View survey JSON
+3. Create survey (interactive)
+4. Add question to survey
+5. Send test response
+6. Change survey status
+7. Switch environment
+8. Load JSON from file
+9. Exit
+
+### Environment selection
 
 ```bash
-python main.py add-question <survey-id>
+python main.py --env vanity list
+python main.py --env soul23-dev create --interactive
 ```
 
-Interactive prompts will ask for question type, ID, headline, choices (if applicable), button labels, etc.
+### List surveys
+
+```bash
+python main.py list
+```
 
 ### View survey JSON
 
@@ -87,7 +157,47 @@ Interactive prompts will ask for question type, ID, headline, choices (if applic
 python main.py view <survey-id>
 ```
 
-### Change survey status
+### Create a survey
+
+From stdin:
+```bash
+cat survey.json | python main.py create
+```
+
+Interactively:
+```bash
+python main.py create --interactive
+```
+
+### Add a question
+
+Interactive prompts for type, ID, headline, choices, button labels, etc.
+
+```bash
+python main.py add-question <survey-id>
+```
+
+From stdin:
+```bash
+cat <<'EOF' | python main.py add-question <survey-id>
+{"id":"q1","type":"openText","headline":{"default":"Name?"},"required":true,"inputType":"text","buttonLabel":{"default":"Next"}}
+EOF
+```
+
+### Send test response
+
+```bash
+python main.py send-response <survey-id>
+```
+
+From stdin:
+```bash
+cat <<'EOF' | python main.py send-response
+{"surveyId":"...","data":{"q1":"test answer"},"finished":true}
+EOF
+```
+
+### Change status
 
 ```bash
 python main.py set-status <survey-id> inProgress
@@ -95,11 +205,16 @@ python main.py set-status <survey-id> inProgress
 
 Statuses: `draft`, `inProgress`, `paused`, `completed`
 
-### Switch environment
+### List responses
 
 ```bash
-python main.py --env test list
-python main.py --env production create -i
+python main.py responses <survey-id>
+```
+
+### Start Web UI
+
+```bash
+python main.py serve
 ```
 
 ---
@@ -130,15 +245,6 @@ Every field is included — IDs, headlines, subheaders, placeholders, button lab
 | `inputType` | `text`, `number`, `phone`, `email` |
 | `longAnswer` | `true` (textarea) or `false` (single line) |
 
-**CLI add:**
-```bash
-cat <<'EOF' | python main.py add-question <survey-id>
-{"id":"nombre","type":"openText","headline":{"default":"¿Nombre?"},"required":true,"inputType":"text","buttonLabel":{"default":"Next"}}
-EOF
-```
-
----
-
 ### multipleChoiceSingle
 
 ```json
@@ -149,8 +255,7 @@ EOF
   "required": true,
   "choices": [
     { "id": "c1", "label": { "default": "Plaza O" } },
-    { "id": "c2", "label": { "default": "Los Pinos" } },
-    { "id": "c3", "label": { "default": "Plaza CIMA" } }
+    { "id": "c2", "label": { "default": "Los Pinos" } }
   ],
   "shuffleOption": "none",
   "buttonLabel": { "default": "Siguiente" },
@@ -158,24 +263,14 @@ EOF
 }
 ```
 
-**With "Other" option:**
+With "Other" option:
 ```json
 {
   "id": "ciudad",
-  "type": "multipleChoiceSingle",
-  "headline": { "default": "¿Ciudad?" },
-  "required": true,
-  "choices": [
-    { "id": "saltillo", "label": { "default": "Saltillo" } },
-    { "id": "other", "label": { "default": "Otra" } }
-  ],
-  "shuffleOption": "none",
-  "otherOptionPlaceholder": { "default": "¿Cuál?" },
-  "buttonLabel": { "default": "Siguiente" }
+  "choices": [ ... ],
+  "otherOptionPlaceholder": { "default": "¿Cuál?" }
 }
 ```
-
----
 
 ### multipleChoiceMulti
 
@@ -187,8 +282,7 @@ EOF
   "required": false,
   "choices": [
     { "id": "a1", "label": { "default": "Uñas" } },
-    { "id": "a2", "label": { "default": "SPA" } },
-    { "id": "a3", "label": { "default": "Maquillaje" } }
+    { "id": "a2", "label": { "default": "SPA" } }
   ],
   "shuffleOption": "none",
   "buttonLabel": { "default": "Siguiente" },
@@ -196,9 +290,7 @@ EOF
 }
 ```
 
----
-
-### nps (Net Promoter Score)
+### nps
 
 ```json
 {
@@ -206,15 +298,13 @@ EOF
   "type": "nps",
   "headline": { "default": "¿Qué tan probable es que nos recomiendes?" },
   "required": true,
-  "buttonLabel": { "default": "Siguiente" },
   "lowerLabel": { "default": "Nada probable" },
-  "upperLabel": { "default": "Extremadamente probable" }
+  "upperLabel": { "default": "Extremadamente probable" },
+  "buttonLabel": { "default": "Siguiente" }
 }
 ```
 
-Scale 0–10. Lower/upper labels are optional but recommended.
-
----
+Scale 0–10. Lower/upper labels are optional.
 
 ### rating
 
@@ -225,15 +315,13 @@ Scale 0–10. Lower/upper labels are optional but recommended.
   "headline": { "default": "Califica tu experiencia:" },
   "required": true,
   "rate": 5,
-  "buttonLabel": { "default": "Siguiente" },
   "lowerLabel": { "default": "Malo" },
-  "upperLabel": { "default": "Excelente" }
+  "upperLabel": { "default": "Excelente" },
+  "buttonLabel": { "default": "Siguiente" }
 }
 ```
 
 `rate` = max stars (2–10).
-
----
 
 ### date
 
@@ -255,25 +343,19 @@ Scale 0–10. Lower/upper labels are optional but recommended.
 | `M-d-y` | May-7-2026 |
 | `y-M-d` | 2026-May-7 |
 
----
-
 ### consent
 
 ```json
 {
   "id": "consent",
   "type": "consent",
-  "headline": { "default": "Aceptas los términos y condiciones?" },
+  "headline": { "default": "¿Aceptas los términos y condiciones?" },
   "required": true,
   "label": { "default": "He leído y acepto el aviso de privacidad" },
   "subheader": { "default": "<p>Tu información será tratada con confidencialidad.</p>" },
   "buttonLabel": { "default": "Aceptar" }
 }
 ```
-
-The checkbox text is in `label`. The `headline` is the title shown above.
-
----
 
 ### fileUpload
 
@@ -283,7 +365,6 @@ The checkbox text is in `label`. The `headline` is the title shown above.
   "type": "fileUpload",
   "headline": { "default": "Sube una foto de tu INE (frontal)" },
   "required": true,
-  "subheader": { "default": "La foto debe ser legible, sin reflejos" },
   "allowMultipleFiles": false,
   "maxSizeInMB": 10,
   "validation": {
@@ -299,8 +380,6 @@ The checkbox text is in `label`. The `headline` is the title shown above.
   "backButtonLabel": { "default": "Atrás" }
 }
 ```
-
----
 
 ### matrix
 
@@ -318,131 +397,72 @@ The checkbox text is in `label`. The `headline` is the title shown above.
   ],
   "rows": [
     { "id": "calidad", "label": { "default": "Calidad del servicio" } },
-    { "id": "atencion", "label": { "default": "Atención al cliente" } },
-    { "id": "instalaciones", "label": { "default": "Instalaciones" } }
+    { "id": "atencion", "label": { "default": "Atención al cliente" } }
   ],
   "buttonLabel": { "default": "Siguiente" }
 }
 ```
 
-Each row gets a radio-button group with the columns as options.
-
 ---
 
-## Real-World Survey Examples
+## Real-World Examples
 
-### Minimal survey with welcome card + 2 questions
+### Minimal survey
 
 ```json
 {
   "name": "Feedback Rápido",
   "type": "link",
   "status": "draft",
-  "welcomeCard": {
-    "enabled": true,
-    "headline": { "default": "¡Gracias por tu tiempo!" },
-    "buttonLabel": { "default": "Comenzar" }
-  },
+  "welcomeCard": { "enabled": true, "headline": { "default": "¡Gracias!" }, "buttonLabel": { "default": "Comenzar" } },
   "questions": [
-    {
-      "id": "nombre",
-      "type": "openText",
-      "headline": { "default": "¿Cómo te llamas?" },
-      "required": true,
-      "inputType": "text",
-      "buttonLabel": { "default": "Siguiente" }
-    },
-    {
-      "id": "nps",
-      "type": "nps",
-      "headline": { "default": "¿Qué tan probable es que nos recomiendes?" },
-      "required": true,
-      "buttonLabel": { "default": "Finalizar" }
-    }
+    { "id": "nombre", "type": "openText", "headline": { "default": "¿Nombre?" }, "required": true, "inputType": "text", "buttonLabel": { "default": "Siguiente" } },
+    { "id": "nps", "type": "nps", "headline": { "default": "¿Nos recomiendas?" }, "required": true, "buttonLabel": { "default": "Finalizar" } }
   ],
   "displayOption": "displayOnce",
   "thankYouCard": { "enabled": false }
 }
 ```
 
-```bash
-cat feedback.json | python main.py create
-```
-
-### Full survey with all question types
+### Full survey from template
 
 ```bash
-# Download a full template
 curl -s http://localhost:8080/api/templates/full-survey | python main.py create
 ```
 
-### Update survey status
+### Load from file
 
 ```bash
-python main.py set-status <survey-id> inProgress
-python main.py set-status <survey-id> completed
+python main.py load
+# Prompts for file path, validates, and shows JSON
 ```
-
-### Add a question to an existing survey via stdin
-
-```bash
-cat <<'EOF' | python main.py add-question <survey-id>
-{"id":"comentarios","type":"openText","headline":{"default":"Comentarios adicionales"},"required":false,"inputType":"text","longAnswer":true,"placeholder":{"default":"Escribe aquí..."},"buttonLabel":{"default":"Enviar"}}
-EOF
-```
-
----
-
-## Interactive TUI (Rich menu)
-
-```bash
-python main.py
-```
-
-Menu options:
-1. List surveys
-2. View survey JSON
-3. Create survey (interactive — all fields)
-4. Add question to survey (interactive — choose type, all fields)
-5. Send test response
-6. Change survey status
-7. Switch environment
-8. Exit
-
-The interactive mode prompts for every field — IDs, headlines, subheaders, choices, button labels, back buttons, validation rules, etc.
-
----
-
-## Web UI
-
-```bash
-python main.py serve
-# Open http://localhost:8080
-```
-
-Browser-based visual builder with:
-- Live JSON preview
-- Template gallery (one-click add any question type)
-- Full question editor with all fields
-- Download JSON / Save to API
 
 ---
 
 ## Project Structure
 
 ```
-├── main.py                 # CLI entry point
+├── main.py                 # CLI entry point (argparse + interactive loop)
+├── config.json             # Environment config (gitignored)
+├── config.example.json     # Example config template
 ├── client/
-│   └── formbricks.py       # API client (v1 + v2)
+│   └── formbricks.py       # API client (v1 + v2 management endpoints)
 ├── ui/
-│   └── tui.py              # Rich TUI components
+│   └── tui.py              # Rich TUI components (menus, prompts, tables)
 ├── web/
-│   ├── app.py              # Flask server
+│   ├── app.py              # Flask server (API proxy + survey builder)
 │   ├── static/
-│   │   ├── app.js
-│   │   └── style.css
+│   │   ├── app.js          # Builder logic, import/fix, themes, sidebar
+│   │   └── style.css       # Catppuccin Frappe/Latte themes
 │   └── templates/
-│       └── index.html
-├── config.example.json
+│       └── index.html      # Single-page builder UI
 └── README.md
 ```
+
+---
+
+<p align="center">
+  <a href="https://soul23.mx"><strong>Soul23 · Grupo AlMa del Norte</strong></a>
+  <br>
+  <sub>Todos los derechos reservados</sub>
+</p>

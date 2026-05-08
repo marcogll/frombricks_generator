@@ -59,12 +59,15 @@ def validate_json_file(path: str) -> dict | None:
     return data
 
 
-def show_header(env_name: str):
+def show_header(env: dict):
+    label = env.get("label") or env.get("name", "")
+    env_type = env.get("env_type", "")
+    header_text = f"{label} ({env_type})" if env_type else label
     console.print()
     console.print(
         Panel.fit(
             f"[bold cyan]Formbricks CLI Manager[/bold cyan]\n"
-            f"[yellow]Current env:[/yellow] [green]{env_name}[/green]",
+            f"[yellow]Current env:[/yellow] [green]{header_text}[/green]",
             border_style="blue",
         )
     )

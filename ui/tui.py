@@ -4,9 +4,59 @@ from rich.panel import Panel
 from rich.prompt import Prompt, IntPrompt
 from rich import box
 from typing import Optional
-import json
+import json, os, sys
+from pathlib import Path
 
 console = Console()
+
+def log_error(msg: str, detail: str = ""):
+    console.print(f"[red]✖ {msg}[/red]")
+    if detail:
+        console.print(f"  [dim]{detail}[/dim]")
+
+
+def log_warn(msg: str):
+    console.print(f"[yellow]⚠ {msg}[/yellow]")
+
+
+def log_ok(msg: str):
+    console.print(f"[green]✔ {msg}[/green]")
+
+
+def validate_json_file(path: str) -> dict | None:
+    """Load and validate a JSON file. Returns parsed dict or None on error."""
+    try:
+        with open(path) as f:
+            raw = f.read()
+    except FileNotFoundError:
+        log_error(f"File not found: {path}")
+        return None
+    except OSError as e:
+        log_error(f"Can't read file", str(e))
+        return None
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        log_error(
+            f"Invalid JSON in {os.path.basename(path)}",
+            f"Line {e.lineno}, col {e.colno}: {e.msg}"
+        )
+        # Show context around error
+        lines = raw.splitlines()
+        start = max(0, e.lineno - 3)
+        end = min(len(lines), e.lineno + 2)
+        console.print("  [dim]Context:[/dim]")
+        for i in range(start, end):
+            prefix = "→" if i + 1 == e.lineno else " "
+            console.print(f"  {prefix} {i+1:3d} | {lines[i]}")
+        return None
+
+    if not isinstance(data, dict):
+        log_error("JSON root must be an object ({...})")
+        return None
+
+    return data
 
 
 def show_header(env_name: str):
@@ -30,8 +80,9 @@ def show_menu() -> int:
     console.print("  [bold cyan]5.[/bold cyan] Send test response")
     console.print("  [bold cyan]6.[/bold cyan] Change survey status")
     console.print("  [bold cyan]7.[/bold cyan] Switch environment")
-    console.print("  [bold cyan]8.[/bold cyan] Exit")
-    return IntPrompt.ask("\n[bold]Select option", default=8)
+    console.print("  [bold cyan]8.[/bold cyan] Load survey from JSON file")
+    console.print("  [bold cyan]9.[/bold cyan] Exit")
+    return IntPrompt.ask("\n[bold]Select option", default=9)
 
 
 def select_env(envs: list[dict]) -> Optional[dict]:
@@ -41,7 +92,8 @@ def select_env(envs: list[dict]) -> Optional[dict]:
     table.add_column("Base URL", style="blue")
     table.add_column("Env ID")
     for i, env in enumerate(envs, 1):
-        table.add_row(str(i), env["name"], env["base_url"], env["environment_id"])
+        label = env.get("label") or env["name"]
+        table.add_row(str(i), label, env["base_url"], env["environment_id"])
     console.print(table)
     idx = IntPrompt.ask("[bold]Select environment", default=1)
     if 1 <= idx <= len(envs):
@@ -406,3 +458,69 @@ def select_status() -> str:
         console.print(f"  {i}. {s}")
     idx = IntPrompt.ask("[bold]Select new status", default=1)
     return statuses[idx - 1]
+
+
+def prompt_load_json_file() -> dict | None:
+    """Prompt user to load a survey from a JSON file."""
+    path = Prompt.ask("[bold]Path to JSON file", default="survey.json")
+    data = validate_json_file(path)
+    if data is None:
+        return None
+
+    log_ok(f"Loaded {os.path.basename(path)}")
+    console.print(f"  [dim]Name:[/dim] {data.get('name', '(unnamed)')}")
+    console.print(f"  [dim]Questions:[/dim] {len(data.get('questions', []))}")
+    console.print(f"  [dim]Status:[/dim] {data.get('status', '(not set)')}")
+
+    return data
+
+
+def validate_survey_draft(survey: dict, silent: bool = False) -> dict:
+    """Ensure a draft survey has required fields. Warns/prompts for missing items.
+    When silent=True, auto-fixes without interactive prompts."""
+    modified = False
+    log_ok("Validating survey structure")
+
+    # Check welcome card
+    wc = survey.get("welcomeCard")
+    if not wc or not wc.get("enabled"):
+        log_warn("Welcome card is missing or disabled")
+        if silent:
+            survey.setdefault("welcomeCard", {"enabled": False})
+            modified = True
+        elif survey.get("status") in (None, "draft"):
+            console.print("  Surveys in [bold]draft[/bold] status typically have a welcome card.")
+            if _yn("Add a welcome card now?", "y"):
+                survey["welcomeCard"] = prompt_welcome_card()
+                modified = True
+
+    # Ensure thankYouCard exists
+    if "thankYouCard" not in survey:
+        survey["thankYouCard"] = {"enabled": False}
+
+    # Ensure displayOption exists
+    if not survey.get("displayOption"):
+        survey["displayOption"] = "displayOnce"
+        log_warn("Missing displayOption, set to 'displayOnce'")
+        modified = True
+
+    # Validate questions
+    questions = survey.get("questions", [])
+    for i, q in enumerate(questions):
+        if not q.get("id"):
+            q["id"] = f"q{i+1}"
+            log_warn(f"Question {i+1} missing 'id', set to '{q['id']}'")
+            modified = True
+        if not q.get("type"):
+            q["type"] = "openText"
+            log_warn(f"Question {i+1} missing 'type', set to 'openText'")
+            modified = True
+        if not q.get("headline"):
+            q["headline"] = {"default": f"Question {i+1}"}
+            log_warn(f"Question {i+1} missing 'headline', using placeholder")
+            modified = True
+
+    if modified:
+        log_ok("Survey was adjusted — review the JSON before sending")
+
+    return survey

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,29 +9,36 @@
 <body>
 
 <header>
-  <div style="display:flex;align-items:center;gap:12px">
-    <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" alt="Soul23" style="height:28px">
-    <div>
+  <div class="brand">
+    <img class="logo-img" src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" alt="Soul23">
+    <div class="brand-text">
       <h1>Formbricks Studio</h1>
       <div class="subtitle">Survey Builder — drag-free visual editor</div>
     </div>
   </div>
   <div class="env-bar">
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
     <label style="font-size:12px;color:var(--text2)">Environment:</label>
     <select id="env-select"></select>
-    <button class="btn btn-secondary btn-sm" id="new-survey-btn">+ New Survey</button>
+    <button class="btn btn-secondary btn-sm" id="new-survey-btn">+ New</button>
     <button class="btn btn-secondary btn-sm" id="templates-btn">📦 Templates</button>
     <button class="btn btn-primary btn-sm" id="save-survey-btn">💾 Save</button>
     <button class="btn btn-secondary btn-sm" id="download-json-btn">⬇ JSON</button>
+    <button class="btn btn-secondary btn-sm" id="import-btn">📥 Import</button>
   </div>
 </header>
 
-<div class="app">
+<div class="app" id="app-layout">
 
-  <!-- LEFT: Survey List -->
-  <div class="panel">
-    <h2>Surveys</h2>
-    <div id="survey-list"><div class="loading">Loading surveys</div></div>
+  <!-- LEFT: Survey List (collapsible sidebar) -->
+  <div class="panel panel-left" id="sidebar">
+    <div class="panel-header" onclick="toggleSidebar()">
+      <h2>Surveys</h2>
+      <span class="collapse-icon">◀</span>
+    </div>
+    <div class="panel-content">
+      <div id="survey-list"><div class="loading">Loading surveys</div></div>
+    </div>
   </div>
 
   <!-- CENTER: Builder -->
@@ -138,6 +145,37 @@
     </div>
   </div>
 </div>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal" style="max-width:700px">
+    <button class="modal-close" id="import-modal-close">✕</button>
+    <h2>📥 Import JSON</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Paste a survey JSON below or upload a file. The <strong>Fix & Load</strong> button will auto-fill missing fields and load it into the builder.</p>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="file" id="import-file-input" accept=".json,application/json" style="display:none">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file-input').click()">📂 Upload File</button>
+      <button class="btn btn-secondary btn-sm" id="import-fix-btn">🔧 Fix & Load</button>
+    </div>
+
+    <textarea id="import-textarea" placeholder='Paste your survey JSON here…&#10;&#10;Example:&#10;{ "name": "My Survey", "type": "link", "questions": [...] }' style="width:100%;height:280px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:10px;font-family:monospace;font-size:12px;resize:vertical"></textarea>
+
+    <div id="import-status" style="margin-top:8px;font-size:13px;min-height:20px"></div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img class="logo-img" src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/s23_logo.svg" alt="Soul23" style="height:20px">
+      <span class="footer-title">Soul23</span>
+      <span class="footer-sep">·</span>
+      <span class="footer-sub">Formbricks Studio</span>
+    </div>
+    <div class="footer-copy">Todos los derechos reservados · Grupo Alma del Norte</div>
+  </div>
+</footer>
 
 <script src="/static/app.js"></script>
 </body>

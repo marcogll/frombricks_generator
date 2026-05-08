@@ -19,6 +19,11 @@ from ui.tui import (
     prompt_response,
     select_survey,
     select_status,
+    prompt_load_json_file,
+    validate_survey_draft,
+    log_error,
+    log_ok,
+    log_warn,
 )
 
 
@@ -68,23 +73,29 @@ def cmd_view(client, env, survey_id):
 def cmd_create_interactive(client, env):
     data = prompt_survey_create()
     data["environmentId"] = env["environment_id"]
+    data = validate_survey_draft(data)
     console.print("[yellow]JSON to send:[/yellow]")
     show_json(data)
     if Prompt.ask("[bold]Send?", choices=["y", "n"], default="y") == "y":
         result = client.create_survey(data)
-        console.print("[green]Survey created![/green]")
+        log_ok("Survey created!")
         show_json(result)
 
 
 def cmd_create_stdin(client, env):
     raw = sys.stdin.read()
-    data = FormbricksClient.validate_json(raw)
+    try:
+        data = FormbricksClient.validate_json(raw)
+    except FormbricksError as e:
+        log_error("Invalid JSON input", str(e))
+        sys.exit(1)
     data.setdefault("environmentId", env["environment_id"])
     if "name" not in data:
-        console.print("[red]JSON must include a 'name' field[/red]")
+        log_error("JSON must include a 'name' field")
         sys.exit(1)
+    data = validate_survey_draft(data)
     result = client.create_survey(data)
-    console.print("[green]Survey created![/green]")
+    log_ok("Survey created!")
     show_json(result)
 
 
@@ -192,9 +203,7 @@ def interactive_mode(config):
                 if s:
                     status = select_status()
                     client.update_survey(s["id"], {"status": status})
-                    console.print(
-                        f"[green]Survey '{s['name']}' status set to '{status}'[/green]"
-                    )
+                    log_ok(f"Survey '{s['name']}' status set to '{status}'")
             elif choice == 7:
                 sel = select_env(envs)
                 if sel:
@@ -205,12 +214,22 @@ def interactive_mode(config):
                         sel["environment_id"],
                     )
             elif choice == 8:
+                data = prompt_load_json_file()
+                if data:
+                    data["environmentId"] = current_env["environment_id"]
+                    data = validate_survey_draft(data)
+                    show_json(data)
+                    if Prompt.ask("[bold]Send to API?", choices=["y", "n"], default="n") == "y":
+                        result = client.create_survey(data)
+                        log_ok("Survey created from file!")
+                        show_json(result)
+            elif choice == 9:
                 console.print("[cyan]Goodbye![/cyan]")
                 break
         except FormbricksError as e:
-            console.print(f"[red]Error: {e}[/red]")
+            log_error("API request failed", str(e))
 
-        if choice != 8:
+        if choice != 9:
             Prompt.ask("\n[dim]Press Enter to continue...[/dim]", default="")
 
 
@@ -298,7 +317,6 @@ def main():
             responses = client.get_responses(args.survey_id)
             show_json({"data": responses})
         elif args.command == "serve":
-            import os, signal
             # Kill any existing Flask on the same port
             import subprocess
             try:

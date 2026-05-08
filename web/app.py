@@ -29,6 +29,11 @@ def get_client(env_name=None):
         env = envs[0]
     return FormbricksClient(env["base_url"], env["api_key"], env["environment_id"]), env
 
+
+def fix_survey(data: dict) -> dict:
+    from ui.tui import validate_survey_draft
+    return validate_survey_draft(data, silent=True)
+
 TEMPLATES = {
     "openText": {
         "id": "q1",
@@ -583,6 +588,19 @@ def api_send_response(survey_id):
         return jsonify(result), 201
     except FormbricksError as e:
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/fix-survey", methods=["POST"])
+def api_fix_survey():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+    try:
+        from ui.tui import validate_survey_draft
+        fixed = validate_survey_draft(data, silent=True)
+        return jsonify(fixed)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

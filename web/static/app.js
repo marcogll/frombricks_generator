@@ -22,6 +22,8 @@ let state = {
 
 /* ─── Init ─── */
 document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  initSidebar();
   await loadEnvs();
   document.getElementById('env-select').addEventListener('change', (e) => {
     state.env = e.target.value;
@@ -31,11 +33,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('save-survey-btn').addEventListener('click', saveSurvey);
   document.getElementById('download-json-btn').addEventListener('click', downloadJSON);
   document.getElementById('templates-btn').addEventListener('click', openTemplates);
+  document.getElementById('import-btn').addEventListener('click', openImport);
   document.getElementById('modal-close').addEventListener('click', closeTemplates);
-  document.getElementById('add-question-btn').addEventListener('click', () => addQuestion());
-  document.getElementById('add-welcome').addEventListener('click', () => toggleSection('welcome-section'));
-  document.getElementById('add-endings').addEventListener('click', () => toggleSection('endings-section'));
-  document.getElementById('add-advanced').addEventListener('click', () => toggleSection('advanced-section'));
+  document.getElementById('import-modal-close').addEventListener('click', closeImport);
+  document.getElementById('import-fix-btn').addEventListener('click', fixAndLoadJSON);
+  document.getElementById('import-file-input').addEventListener('change', handleFileImport);
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 });
 
 /* ─── Env ─── */
@@ -43,7 +46,7 @@ async function loadEnvs() {
   const res = await fetch('/api/envs');
   state.envs = await res.json();
   const sel = document.getElementById('env-select');
-  sel.innerHTML = state.envs.map(e => `<option value="${e.name}">${e.name}</option>`).join('');
+  sel.innerHTML = state.envs.map(e => `<option value="${e.name}">${e.label || e.name}</option>`).join('');
   if (state.envs.length) { state.env = state.envs[0].name; loadSurveys(); }
 }
 
@@ -674,4 +677,196 @@ function toast(msg, type) {
 function toggleSection(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+/* ─── Theme ─── */
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  applyTheme(theme);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-toggle').textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem('theme', next);
+}
+
+/* ─── Sidebar Collapse ─── */
+function initSidebar() {
+  const saved = localStorage.getItem('sidebarCollapsed');
+  if (saved === 'true') {
+    document.getElementById('sidebar').classList.add('collapsed');
+    document.getElementById('app-layout').classList.add('sidebar-collapsed');
+  }
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const layout = document.getElementById('app-layout');
+  sidebar.classList.toggle('collapsed');
+  layout.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+}
+
+/* ─── Import JSON ─── */
+function openImport() {
+  document.getElementById('import-textarea').value = '';
+  document.getElementById('import-status').textContent = '';
+  document.getElementById('import-modal').classList.add('open');
+}
+
+function closeImport() {
+  document.getElementById('import-modal').classList.remove('open');
+}
+
+function handleFileImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    document.getElementById('import-textarea').value = ev.target.result;
+    document.getElementById('import-status').innerHTML = '<span style="color:var(--green)">✓ File loaded. Click <strong>Fix & Load</strong> to process.</span>';
+  };
+  reader.onerror = () => {
+    document.getElementById('import-status').innerHTML = '<span style="color:var(--red)">Error reading file</span>';
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function fixSurveyJSON(raw) {
+  let data;
+  try {
+    data = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(JSON.stringify(raw));
+  } catch(e) {
+    document.getElementById('import-status').innerHTML = '<span style="color:var(--red)">Invalid JSON: ' + esc(e.message) + '</span>';
+    return null;
+  }
+  let fixed = false;
+  const msgs = [];
+
+  if (!data.name) { data.name = 'Imported Survey'; msgs.push('name'); fixed = true; }
+  if (!data.type) { data.type = 'link'; msgs.push('type → link'); fixed = true; }
+  if (!data.status) { data.status = 'draft'; msgs.push('status → draft'); fixed = true; }
+  if (!data.displayOption) { data.displayOption = 'displayOnce'; msgs.push('displayOption'); fixed = true; }
+  if (!data.thankYouCard) { data.thankYouCard = { enabled: false }; msgs.push('thankYouCard'); fixed = true; }
+  if (!data.welcomeCard) { data.welcomeCard = { enabled: false }; msgs.push('welcomeCard'); fixed = true; }
+
+  if (!data.questions || !Array.isArray(data.questions)) {
+    data.questions = [];
+    msgs.push('questions array');
+    fixed = true;
+  }
+
+  // Convert blocks.elements format to questions
+  if (!data.questions.length && data.blocks && Array.isArray(data.blocks)) {
+    const extracted = [];
+    data.blocks.forEach(b => {
+      if (b.elements && Array.isArray(b.elements)) extracted.push(...b.elements);
+    });
+    if (extracted.length) {
+      data.questions = extracted;
+      delete data.blocks;
+      msgs.push('converted blocks→questions');
+      fixed = true;
+    }
+  }
+
+  // Fix each question
+  data.questions.forEach((q, i) => {
+    if (!q.id) { q.id = 'q' + (i + 1); msgs.push('q' + (i + 1) + ' id'); fixed = true; }
+    if (!q.type) { q.type = 'openText'; msgs.push(q.id + ' type → openText'); fixed = true; }
+    if (!q.headline) {
+      q.headline = { default: 'Question ' + (i + 1) };
+      msgs.push(q.id + ' headline');
+      fixed = true;
+    } else if (typeof q.headline === 'string') {
+      q.headline = { default: q.headline };
+      msgs.push(q.id + ' headline (converted)');
+      fixed = true;
+    }
+    if (!q.buttonLabel) { q.buttonLabel = { default: 'Next' }; msgs.push(q.id + ' buttonLabel'); fixed = true; }
+
+    if (q.type === 'multipleChoiceSingle' || q.type === 'multipleChoiceMulti') {
+      if (!q.choices || !Array.isArray(q.choices)) {
+        q.choices = [];
+        msgs.push(q.id + ' choices');
+        fixed = true;
+      }
+      q.choices.forEach((c, ci) => {
+        if (!c.id) { c.id = 'c' + (ci + 1); msgs.push(q.id + ' choice ' + (ci + 1) + ' id'); fixed = true; }
+        if (!c.label) {
+          c.label = { default: 'Option ' + (ci + 1) };
+          msgs.push(q.id + ' choice ' + (ci + 1) + ' label');
+          fixed = true;
+        } else if (typeof c.label === 'string') {
+          c.label = { default: c.label };
+          msgs.push(q.id + ' choice ' + (ci + 1) + ' label (converted)');
+          fixed = true;
+        }
+      });
+    }
+  });
+
+  // Ensure endings array
+  if (!data.endings || !Array.isArray(data.endings)) {
+    data.endings = [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }];
+    msgs.push('endings');
+    fixed = true;
+  }
+
+  // Ensure hiddenFields
+  if (!data.hiddenFields) {
+    data.hiddenFields = { enabled: false, fieldIds: [] };
+    msgs.push('hiddenFields');
+    fixed = true;
+  }
+
+  const statusEl = document.getElementById('import-status');
+  if (fixed) {
+    statusEl.innerHTML = '<span style="color:var(--green)">✓ Fixed: ' + msgs.join(', ') + '.<br>Ready to load into builder.</span>';
+  } else {
+    statusEl.innerHTML = '<span style="color:var(--green)">✓ JSON looks clean — no fixes needed.</span>';
+  }
+  return data;
+}
+
+function fixAndLoadJSON() {
+  const raw = document.getElementById('import-textarea').value.trim();
+  if (!raw) {
+    document.getElementById('import-status').innerHTML = '<span style="color:var(--orange)">Paste some JSON first or upload a file.</span>';
+    return;
+  }
+  const data = fixSurveyJSON(raw);
+  if (!data) return;
+  loadIntoBuilder(data);
+  closeImport();
+  toast('Survey imported from JSON', 'success');
+}
+
+function loadIntoBuilder(data) {
+  state.currentSurvey = null;
+  state.editingQuestion = null;
+  state.builder = {
+    name: data.name || 'Imported Survey',
+    type: data.type || 'link',
+    status: data.status || 'draft',
+    welcomeCard: data.welcomeCard || { enabled: true, headline: { default: 'Welcome!' }, subheader: { default: '' }, buttonLabel: { default: 'Start' }, timeToFinish: true, showResponseCount: false },
+    endings: Array.isArray(data.endings) && data.endings.length ? data.endings : [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }],
+    questions: Array.isArray(data.questions) ? data.questions : [],
+    hiddenFields: data.hiddenFields || { enabled: false, fieldIds: [] },
+    variables: Array.isArray(data.variables) ? data.variables : [],
+    displayOption: data.displayOption || 'displayOnce',
+    singleUse: data.singleUse || { enabled: false, isEncrypted: true },
+    recaptcha: data.recaptcha || { enabled: false, threshold: 0.1 },
+  };
+  renderBuilder();
 }

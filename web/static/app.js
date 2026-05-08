@@ -104,6 +104,7 @@ function renderSurveyList() {
 async function loadSurvey(id) {
   const res = await fetch(`/api/surveys/${id}?env=${state.env}`);
   const survey = await res.json();
+  if (!res.ok) { toast(survey.error || 'Failed to load survey', 'error'); return; }
   state.currentSurvey = survey;
   state.editingQuestion = null;
 
@@ -158,6 +159,7 @@ function renderBuilder() {
   renderQuestions();
   renderAdvanced();
   renderJSON();
+  showEvalSection();
 }
 
 /* ─── Welcome Card ─── */
@@ -1050,10 +1052,3 @@ function evalDownloadResults() {
   URL.revokeObjectURL(a.href);
   toast('Results downloaded', 'success');
 }
-
-// Patch loadSurvey to show eval section after loading
-const _origLoadSurvey = loadSurvey;
-loadSurvey = async function(id) {
-  await _origLoadSurvey(id);
-  showEvalSection();
-};

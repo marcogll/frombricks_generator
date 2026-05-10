@@ -2,15 +2,28 @@
 import json
 import os
 import sys
+import hashlib
+import secrets
 
-from flask import Flask, jsonify, render_template, request, Response
+from functools import wraps
+from flask import Flask, jsonify, render_template, request, Response, session, redirect, url_for
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.formbricks import FormbricksClient, FormbricksError
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+AUTH_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "auth.json")
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_authenticated():
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 def load_config():
     envs_from_env = os.environ.get("FORMBRICKS_ENVIRONMENTS")
@@ -24,6 +37,30 @@ def load_config():
             return json.load(f)
     return {"environments": []}
 
+def load_auth():
+    if os.path.exists(AUTH_PATH):
+        with open(AUTH_PATH) as f:
+            return json.load(f)
+    return None
+
+def save_auth(username, password):
+    salt = secrets.token_hex(16)
+    pw_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+    auth_data = {"username": username, "salt": salt, "password": pw_hash}
+    with open(AUTH_PATH, "w") as f:
+        json.dump(auth_data, f)
+    return auth_data
+
+def verify_auth(username, password):
+    auth = load_auth()
+    if not auth or auth.get("username") != username:
+        return False
+    pw_hash = hashlib.sha256((password + auth["salt"]).encode()).hexdigest()
+    return pw_hash == auth["password"]
+
+def is_authenticated():
+    return session.get("authenticated", False)
+
 def get_client(env_name=None):
     cfg = load_config()
     envs = cfg.get("environments", [])
@@ -36,6 +73,50 @@ def get_client(env_name=None):
     else:
         env = envs[0]
     return FormbricksClient(env["base_url"], env["api_key"], env["environment_id"]), env
+
+
+@app.route("/")
+def index():
+    if not is_authenticated():
+        return redirect(url_for("login"))
+    return render_template("index.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    auth = load_auth()
+    is_setup = auth is not None
+    
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        
+        if not is_setup:
+            if len(username) < 2 or len(password) < 4:
+                return render_template("login.html", error="Usuario mínimo 2 caracteres, contraseña mínimo 4", is_setup=False, brand="Soul23")
+            save_auth(username, password)
+            session["authenticated"] = True
+            session["username"] = username
+            return redirect(url_for("index"))
+        else:
+            if verify_auth(username, password):
+                session["authenticated"] = True
+                session["username"] = username
+                return redirect(url_for("index"))
+            return render_template("login.html", error="Credenciales incorrectas", is_setup=True, brand="Soul23")
+    
+    return render_template("login.html", is_setup=is_setup, brand="Soul23")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.route("/api/auth/status")
+def auth_status():
+    return jsonify({"authenticated": is_authenticated(), "setup": load_auth() is not None})
 
 
 def fix_survey(data: dict) -> dict:
@@ -184,18 +265,15 @@ FULL_SURVEY_TEMPLATE = {
 }
 
 
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
 @app.route("/api/envs")
+@require_auth
 def api_envs():
     cfg = load_config()
     return jsonify(cfg.get("environments", []))
 
 
 @app.route("/api/surveys")
+@require_auth
 def api_surveys():
     env = request.args.get("env")
     try:
@@ -207,6 +285,7 @@ def api_surveys():
 
 
 @app.route("/api/surveys/<survey_id>")
+@require_auth
 def api_survey(survey_id):
     env = request.args.get("env")
     try:
@@ -218,6 +297,7 @@ def api_survey(survey_id):
 
 
 @app.route("/api/surveys", methods=["POST"])
+@require_auth
 def api_create_survey():
     env = request.args.get("env")
     data = request.get_json()
@@ -235,6 +315,7 @@ def api_create_survey():
 
 
 @app.route("/api/surveys/<survey_id>", methods=["PUT"])
+@require_auth
 def api_update_survey(survey_id):
     env = request.args.get("env")
     data = request.get_json()
@@ -251,6 +332,7 @@ def api_update_survey(survey_id):
 
 
 @app.route("/api/surveys/<survey_id>", methods=["DELETE"])
+@require_auth
 def api_delete_survey(survey_id):
     env = request.args.get("env")
     try:
@@ -264,6 +346,7 @@ def api_delete_survey(survey_id):
 
 
 @app.route("/api/templates")
+@require_auth
 def api_templates():
     type_filter = request.args.get("type")
     if type_filter:
@@ -275,6 +358,7 @@ def api_templates():
 
 
 @app.route("/api/templates/full-survey")
+@require_auth
 def api_full_survey_template():
     return jsonify(FULL_SURVEY_TEMPLATE)
 
@@ -585,6 +669,7 @@ Auth: `x-api-key` header.
 
 
 @app.route("/api/templates/docs/survey-structure")
+@require_auth
 def api_survey_docs():
     fmt = request.args.get("format", "md")
     if fmt == "md":
@@ -593,6 +678,7 @@ def api_survey_docs():
 
 
 @app.route("/api/responses/<survey_id>", methods=["POST"])
+@require_auth
 def api_send_response(survey_id):
     env = request.args.get("env")
     data = request.get_json()
@@ -614,6 +700,7 @@ def api_send_response(survey_id):
 
 
 @app.route("/api/fix-survey", methods=["POST"])
+@require_auth
 def api_fix_survey():
     data = request.get_json()
     if not data:
@@ -627,6 +714,7 @@ def api_fix_survey():
 
 
 @app.route("/api/eval/template/<survey_id>")
+@require_auth
 def api_eval_template(survey_id):
     env = request.args.get("env")
     try:
@@ -659,6 +747,7 @@ def api_eval_template(survey_id):
 
 
 @app.route("/api/eval/grade/<survey_id>", methods=["POST"])
+@require_auth
 def api_eval_grade(survey_id):
     env = request.args.get("env")
     fmt = request.args.get("format", "json")
@@ -681,6 +770,7 @@ def api_eval_grade(survey_id):
 
 
 @app.route("/api/eval/export/<survey_id>")
+@require_auth
 def api_eval_export(survey_id):
     env = request.args.get("env")
     try:

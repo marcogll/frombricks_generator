@@ -78,18 +78,18 @@ header select {
   cursor: pointer; transition: border-color .15s;
 }
 header select:hover { border-color: var(--accent); }
-.theme-toggle {
+.theme-toggle, .btn-logout {
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: var(--radius);
-  padding: 4px 10px;
+  border-radius: 6px;
+  padding: 6px 10px;
   font-size: 16px;
   cursor: pointer;
-  transition: background .15s;
+  transition: all .15s;
   line-height: 1;
 }
-.theme-toggle:hover { background: var(--border); }
+.theme-toggle:hover, .btn-logout:hover { background: var(--border); }
 
 /* ─── Layout ─── */
 .app {

@@ -7,8 +7,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8080
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-ENV PORT=8080
+EXPOSE 23457
+
+ENV PORT=23457
+ENV FLASK_DEBUG=0
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:23457/ || exit 1
 
 CMD ["python", "web/app.py"]

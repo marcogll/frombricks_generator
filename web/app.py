@@ -13,8 +13,16 @@ app = Flask(__name__)
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
 def load_config():
-    with open(CONFIG_PATH) as f:
-        return json.load(f)
+    envs_from_env = os.environ.get("FORMBRICKS_ENVIRONMENTS")
+    if envs_from_env:
+        try:
+            return {"environments": json.loads(envs_from_env)}
+        except json.JSONDecodeError:
+            pass
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH) as f:
+            return json.load(f)
+    return {"environments": []}
 
 def get_client(env_name=None):
     cfg = load_config()
@@ -236,6 +244,19 @@ def api_update_survey(survey_id):
         client, _ = get_client(env)
         result = client.update_survey(survey_id, data)
         return jsonify(result)
+    except FormbricksError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/surveys/<survey_id>", methods=["DELETE"])
+def api_delete_survey(survey_id):
+    env = request.args.get("env")
+    try:
+        client, _ = get_client(env)
+        client.delete_survey(survey_id)
+        return jsonify({"success": True})
     except FormbricksError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -690,7 +711,7 @@ def api_eval_export(survey_id):
 
 
 def main():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 23457))
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
     print(f"Web UI at http://0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=debug)

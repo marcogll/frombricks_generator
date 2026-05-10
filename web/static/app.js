@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.env = e.target.value;
     state.envObj = env || null;
     state.currentSurvey = null;
+    updateEnvDisplay();
     newSurvey();
     loadSurveys();
   });
@@ -52,6 +53,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ─── Env ─── */
+function updateEnvDisplay() {
+  const env = state.envObj;
+  if (!env) return;
+  let display = document.getElementById('env-display');
+  if (!display) {
+    display = document.createElement('span');
+    display.id = 'env-display';
+    display.style.cssText = 'font-size:11px;padding:2px 8px;border-radius:4px;margin-left:8px';
+    document.getElementById('env-select').parentNode.insertBefore(display, document.getElementById('env-select').nextSibling);
+  }
+  const isProd = env.env_type === 'prod';
+  display.textContent = `${env.label || env.name} (${env.env_type})`;
+  display.style.background = isProd ? 'var(--red)' : 'var(--accent)';
+  display.style.color = '#fff';
+}
+
 async function loadEnvs() {
   const res = await fetch('/api/envs');
   state.envs = await res.json();
@@ -70,6 +87,7 @@ async function loadEnvs() {
   if (state.envs.length) {
     state.env = state.envs[0].name;
     state.envObj = state.envs[0];
+    updateEnvDisplay();
     loadSurveys();
   }
 }
@@ -92,16 +110,73 @@ function renderSurveyList() {
   if (!state.surveys.length) { list.innerHTML = '<div style="color:var(--text2);font-size:13px">No surveys found</div>'; return; }
   list.innerHTML = state.surveys.map(s => `
     <div class="survey-item ${state.currentSurvey && state.currentSurvey.id === s.id ? 'active' : ''}" onclick="loadSurvey('${s.id}')">
-      <div>
+      <div class="survey-item-content">
         <div class="name">${esc(s.name)}</div>
         <div class="meta">${s.questions ? s.questions.length : 0} questions · ${esc(s.status)}</div>
       </div>
-      <span class="status-badge status-${s.status}">${s.status}</span>
+      <div class="survey-item-actions">
+        <span class="status-badge status-${s.status}">${s.status}</span>
+        <button class="btn-delete" onclick="event.stopPropagation();deleteSurvey('${s.id}', '${esc(s.name)}')" title="Eliminar">🗑️</button>
+      </div>
     </div>
   `).join('');
 }
 
+async function deleteSurvey(id, name) {
+  const selectedEnv = state.envObj;
+  const envInfo = `${selectedEnv.label || selectedEnv.name} (${selectedEnv.env_type})`;
+  if (!confirm(`¿Eliminar encuesta "${name}" en entorno ${envInfo}?\n\nEsta acción no se puede deshacer.`)) return;
+  
+  const { tryAll } = await import('./app.js').catch(() => ({}));
+  
+  try {
+    const res = await fetch(`/api/surveys/${id}?env=${state.env}`, { method: 'DELETE' });
+    const contentType = res.headers.get('content-type');
+    if (!res.ok) {
+      if (contentType && contentType.includes('application/json')) {
+        const err = await res.json();
+        throw new Error(err.error || 'Delete failed');
+      } else {
+        const shouldTryAll = confirm('Survey no encontrada en este entorno. ¿Intentar borrar en todos los entornos?');
+        if (shouldTryAll) {
+          await deleteFromAllEnvs(id, name);
+          return;
+        }
+        return;
+      }
+    }
+    toast('Survey deleted', 'success');
+    if (state.currentSurvey && state.currentSurvey.id === id) state.currentSurvey = null;
+    loadSurveys();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteFromAllEnvs(id, name) {
+  const envs = state.envs;
+  let deleted = false;
+  for (const env of envs) {
+    try {
+      const res = await fetch(`/api/surveys/${id}?env=${env.name}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast(`Eliminado de ${env.label || env.name} (${env.env_type})`, 'success');
+        deleted = true;
+        break;
+      }
+    } catch(e) { continue; }
+  }
+  if (deleted) {
+    if (state.currentSurvey && state.currentSurvey.id === id) state.currentSurvey = null;
+    loadSurveys();
+  } else {
+    toast('No se pudo eliminar la encuesta de ningún entorno', 'error');
+  }
+}
+
 async function loadSurvey(id) {
+  const selectedEnv = state.envObj;
+  const envInfo = `${selectedEnv.label || selectedEnv.name} (${selectedEnv.env_type})`;
+  if (!confirm(`Cargar encuesta en entorno: ${envInfo}\n\n¿Confirmar?`)) return;
+  
   const res = await fetch(`/api/surveys/${id}?env=${state.env}`);
   const survey = await res.json();
   if (!res.ok) { toast(survey.error || 'Failed to load survey', 'error'); return; }
@@ -593,7 +668,10 @@ async function saveSurvey() {
   const json = buildSurveyJSON();
   const isNew = !state.currentSurvey;
 
-  if (isNew && !confirm('¿Estás seguro de enviar esta encuesta a Formbricks?')) return;
+  const selectedEnv = state.envObj;
+  const envInfo = `${selectedEnv.label || selectedEnv.name} (${selectedEnv.env_type})`;
+  if (isNew && !confirm(`Crear encuesta en entorno: ${envInfo}\n\n¿Confirmar?`)) return;
+  if (!isNew && !confirm(`Guardar cambios en entorno: ${envInfo}\n\n¿Confirmar?`)) return;
 
   try {
     let res;

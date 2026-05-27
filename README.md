@@ -32,8 +32,10 @@
 - **Response management** — send test responses interactively or via stdin
 - **Status control** — draft, inProgress, paused, completed
 - **JSON import/fix** — paste or upload JSON, auto-fills missing fields (IDs, headlines, welcome card, endings, etc.)
+- **JSON export** — download any survey as a `.json` file from TUI or headless CLI
 - **Survey links** — view response/preview and edit URLs after saving
 - **Draft validation** — warns when welcome card is missing and prompts to add one
+- **Evaluation module** — grade responses against an answer key with CSV/JSON export
 
 ## Requirements
 
@@ -162,7 +164,8 @@ Menu options:
 6. Change survey status
 7. Switch environment
 8. Load JSON from file
-9. Exit
+9. Export survey as JSON file
+10. Exit
 
 ### Environment selection
 
@@ -231,6 +234,14 @@ python main.py set-status <survey-id> inProgress
 
 Statuses: `draft`, `inProgress`, `paused`, `completed`
 
+### Export survey as JSON
+
+```bash
+python main.py export <survey-id> -o survey.json
+```
+
+If `-o` is omitted, the file is saved as `<survey-name>.json`.
+
 ### List responses
 
 ```bash
@@ -242,6 +253,31 @@ python main.py responses <survey-id>
 ```bash
 python main.py serve
 ```
+
+---
+
+## Formbricks Management API Reference
+
+This tool uses the Formbricks **Management API** (v1 and v2). All requests are authenticated via `x-api-key` header.
+
+### v1 Endpoints
+
+| Method | Endpoint | Used by |
+|--------|----------|---------|
+| `GET` | `/api/v1/management/surveys` | List all surveys |
+| `POST` | `/api/v1/management/surveys` | Create a survey |
+| `GET` | `/api/v1/management/surveys/{id}` | View / export a survey |
+| `PUT` | `/api/v1/management/surveys/{id}` | Update survey (status, questions, etc.) |
+| `DELETE` | `/api/v1/management/surveys/{id}` | Delete a survey |
+| `GET` | `/api/v1/management/responses?surveyId={id}` | List responses for grading / CSV export |
+
+### v2 Endpoints
+
+| Method | Endpoint | Used by |
+|--------|----------|---------|
+| `POST` | `/api/v2/management/responses` | Send a test response |
+
+> Note: Responses use **v2** because v1 returns `409 Conflict` on survey creation race conditions. Surveys stay on **v1** — these APIs are stable and match the official Formbricks management spec.
 
 ---
 
@@ -475,6 +511,9 @@ python main.py load
 │   └── formbricks.py       # API client (v1 + v2 management endpoints)
 ├── ui/
 │   └── tui.py              # Rich TUI components (menus, prompts, tables)
+├── eval/
+│   ├── grader.py           # Answer key grading logic
+│   └── __init__.py
 ├── web/
 │   ├── app.py              # Flask server (API proxy + survey builder)
 │   ├── static/

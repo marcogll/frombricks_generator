@@ -162,6 +162,16 @@ def cmd_set_status(client, env, survey_id, status):
     console.print(f"[green]Status set to '{status}'[/green]")
 
 
+def cmd_export_survey(client, env, survey_id, output):
+    survey = client.get_survey(survey_id)
+    if not output:
+        name = survey.get("name", "survey").replace(" ", "_")
+        output = f"{name}.json"
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(survey, f, indent=2, ensure_ascii=False)
+    log_ok(f"Survey exported to {output}")
+
+
 # ---- Evaluation commands ----
 
 def cmd_eval_template(client, env, survey_id, output):
@@ -320,12 +330,18 @@ def interactive_mode(config):
                         log_ok("Survey created from file!")
                         show_json(result)
             elif choice == 9:
+                surveys = client.list_surveys()
+                s = select_survey(surveys)
+                if s:
+                    output = Prompt.ask("[bold]Output file", default=f"{s['name'].replace(' ', '_')}.json")
+                    cmd_export_survey(client, current_env, s["id"], output)
+            elif choice == 10:
                 console.print("[cyan]Goodbye![/cyan]")
                 break
         except FormbricksError as e:
             log_error("API request failed", str(e))
 
-        if choice != 9:
+        if choice != 10:
             Prompt.ask("\n[dim]Press Enter to continue...[/dim]", default="")
 
 
@@ -360,6 +376,10 @@ def main():
     p_status = sub.add_parser("set-status", help="Change survey status")
     p_status.add_argument("survey_id")
     p_status.add_argument("status", choices=["draft", "inProgress", "paused", "completed"])
+
+    p_export = sub.add_parser("export", help="Export survey as JSON file")
+    p_export.add_argument("survey_id")
+    p_export.add_argument("--output", "-o", help="Output JSON file path")
 
     p_responses = sub.add_parser("responses", help="List responses for a survey")
     p_responses.add_argument("survey_id")
@@ -425,6 +445,8 @@ def main():
                 cmd_send_response_interactive(client, env, args.survey_id)
             else:
                 cmd_send_response_interactive(client, env)
+        elif args.command == "export":
+            cmd_export_survey(client, env, args.survey_id, args.output)
         elif args.command == "set-status":
             cmd_set_status(client, env, args.survey_id, args.status)
         elif args.command == "responses":

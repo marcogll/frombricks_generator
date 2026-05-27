@@ -84,8 +84,9 @@ def show_menu() -> int:
     console.print("  [bold cyan]6.[/bold cyan] Change survey status")
     console.print("  [bold cyan]7.[/bold cyan] Switch environment")
     console.print("  [bold cyan]8.[/bold cyan] Load survey from JSON file")
-    console.print("  [bold cyan]9.[/bold cyan] Exit")
-    return IntPrompt.ask("\n[bold]Select option", default=9)
+    console.print("  [bold cyan]9.[/bold cyan] Export survey as JSON file")
+    console.print("  [bold cyan]10.[/bold cyan] Exit")
+    return IntPrompt.ask("\n[bold]Select option", default=10)
 
 
 def select_env(envs: list[dict]) -> Optional[dict]:

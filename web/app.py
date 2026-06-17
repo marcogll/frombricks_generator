@@ -10,12 +10,30 @@ from flask import Flask, jsonify, render_template, request, Response, session, r
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from client.formbricks import FormbricksClient, FormbricksError
+import shared.config as shconfig
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+import string
+def gen_cuid() -> str:
+    chars = string.ascii_lowercase + string.digits
+    return 'c' + ''.join(secrets.choice(chars) for _ in range(24))
+
+
+@app.after_request
+def no_cache(response):
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+CONFIG_PATH = shconfig.ensure_config()
 AUTH_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "auth.json")
+
+AUTH_USERNAME_ENV = "FORMBRICKS_USERNAME"
+AUTH_PASSWORD_ENV = "FORMBRICKS_PASSWORD"
+
 
 def require_auth(f):
     @wraps(f)
@@ -25,23 +43,17 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-def load_config():
-    envs_from_env = os.environ.get("FORMBRICKS_ENVIRONMENTS")
-    if envs_from_env:
-        try:
-            return {"environments": json.loads(envs_from_env)}
-        except json.JSONDecodeError:
-            pass
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH) as f:
-            return json.load(f)
-    return {"environments": []}
 
 def load_auth():
+    env_user = os.environ.get(AUTH_USERNAME_ENV)
+    env_pass = os.environ.get(AUTH_PASSWORD_ENV)
+    if env_user and env_pass:
+        return {"username": env_user, "env": True}
     if os.path.exists(AUTH_PATH):
         with open(AUTH_PATH) as f:
             return json.load(f)
     return None
+
 
 def save_auth(username, password):
     salt = secrets.token_hex(16)
@@ -51,18 +63,27 @@ def save_auth(username, password):
         json.dump(auth_data, f)
     return auth_data
 
+
 def verify_auth(username, password):
     auth = load_auth()
     if not auth or auth.get("username") != username:
         return False
+    if auth.get("env"):
+        return password == os.environ.get(AUTH_PASSWORD_ENV, "")
     pw_hash = hashlib.sha256((password + auth["salt"]).encode()).hexdigest()
     return pw_hash == auth["password"]
+
 
 def is_authenticated():
     return session.get("authenticated", False)
 
+
+def get_config():
+    return shconfig.load_config(CONFIG_PATH)
+
+
 def get_client(env_name=None):
-    cfg = load_config()
+    cfg = get_config()
     envs = cfg.get("environments", [])
     if not envs:
         raise RuntimeError("No environments configured")
@@ -72,28 +93,31 @@ def get_client(env_name=None):
             raise RuntimeError(f"Environment '{env_name}' not found")
     else:
         env = envs[0]
-    return FormbricksClient(env["base_url"], env["api_key"], env["environment_id"]), env
+    return FormbricksClient(env["base_url"], env["api_key"], env.get("environment_id", "")), env
 
 
 @app.route("/")
 def index():
     if not is_authenticated():
         return redirect(url_for("login"))
-    return render_template("index.html")
+    cfg = get_config()
+    brand = os.environ.get("FORMBRICKS_STUDIO_BRAND", "Lazy")
+    return render_template("index.html", brand=brand)
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     auth = load_auth()
-    is_setup = auth is not None
-    
+    env_auth = bool(os.environ.get(AUTH_USERNAME_ENV) and os.environ.get(AUTH_PASSWORD_ENV))
+    needs_setup = auth is None and not env_auth
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        
-        if not is_setup:
+
+        if needs_setup:
             if len(username) < 2 or len(password) < 4:
-                return render_template("login.html", error="Usuario mínimo 2 caracteres, contraseña mínimo 4", is_setup=False, brand="Soul23")
+                return render_template("login.html", error="Username min 2 chars, password min 4", is_setup=False)
             save_auth(username, password)
             session["authenticated"] = True
             session["username"] = username
@@ -103,9 +127,9 @@ def login():
                 session["authenticated"] = True
                 session["username"] = username
                 return redirect(url_for("index"))
-            return render_template("login.html", error="Credenciales incorrectas", is_setup=True, brand="Soul23")
-    
-    return render_template("login.html", is_setup=is_setup, brand="Soul23")
+            return render_template("login.html", error="Invalid credentials", is_setup=not needs_setup)
+
+    return render_template("login.html", is_setup=not needs_setup)
 
 
 @app.route("/logout")
@@ -116,12 +140,14 @@ def logout():
 
 @app.route("/api/auth/status")
 def auth_status():
-    return jsonify({"authenticated": is_authenticated(), "setup": load_auth() is not None})
+    env_auth = bool(os.environ.get(AUTH_USERNAME_ENV) and os.environ.get(AUTH_PASSWORD_ENV))
+    return jsonify({"authenticated": is_authenticated(), "setup": load_auth() is not None or env_auth})
 
 
 def fix_survey(data: dict) -> dict:
     from ui.tui import validate_survey_draft
     return validate_survey_draft(data, silent=True)
+
 
 TEMPLATES = {
     "openText": {
@@ -251,10 +277,10 @@ FULL_SURVEY_TEMPLATE = {
     "questions": [],
     "endings": [
         {
+            "id": gen_cuid(),
             "type": "endScreen",
             "headline": {"default": "Thank you!"},
             "subheader": {"default": "<p>Your response has been recorded.</p>"},
-            "buttonLabel": {"default": "Close"},
         }
     ],
     "hiddenFields": {"enabled": False, "fieldIds": []},
@@ -265,12 +291,88 @@ FULL_SURVEY_TEMPLATE = {
 }
 
 
+# ─── Environment management API ───
+
 @app.route("/api/envs")
 @require_auth
 def api_envs():
-    cfg = load_config()
+    cfg = get_config()
     return jsonify(cfg.get("environments", []))
 
+
+@app.route("/api/envs", methods=["POST"])
+@require_auth
+def api_add_env():
+    data = request.get_json()
+    if not data or not data.get("name"):
+        return jsonify({"error": "Environment name required"}), 400
+    cfg = get_config()
+    if any(e["name"] == data["name"] for e in cfg.get("environments", [])):
+        return jsonify({"error": f"Environment '{data['name']}' already exists"}), 409
+    cfg.setdefault("environments", []).append(data)
+    shconfig.save_config(cfg, CONFIG_PATH)
+    return jsonify(data), 201
+
+
+@app.route("/api/envs/<env_name>", methods=["PUT"])
+@require_auth
+def api_update_env(env_name):
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON body"}), 400
+    cfg = get_config()
+    envs = cfg.get("environments", [])
+    idx = next((i for i, e in enumerate(envs) if e["name"] == env_name), None)
+    if idx is None:
+        return jsonify({"error": f"Environment '{env_name}' not found"}), 404
+    data["name"] = env_name
+    cfg["environments"][idx] = data
+    shconfig.save_config(cfg, CONFIG_PATH)
+    return jsonify(data)
+
+
+@app.route("/api/envs/<env_name>", methods=["DELETE"])
+@require_auth
+def api_delete_env(env_name):
+    cfg = get_config()
+    envs = cfg.get("environments", [])
+    new_envs = [e for e in envs if e["name"] != env_name]
+    if len(new_envs) == len(envs):
+        return jsonify({"error": f"Environment '{env_name}' not found"}), 404
+    cfg["environments"] = new_envs
+    shconfig.save_config(cfg, CONFIG_PATH)
+    return jsonify({"success": True})
+
+
+@app.route("/api/envs/discover", methods=["POST"])
+@require_auth
+def api_discover_envs():
+    body = request.get_json() or {}
+    base_url = body.get("base_url") or shconfig.env_defaults().get("base_url")
+    api_key = body.get("api_key") or shconfig.env_defaults().get("api_key")
+    if not base_url or not api_key:
+        return jsonify({"error": "base_url and api_key required"}), 400
+    discovered = FormbricksClient.discover_environments(base_url, api_key)
+    if not discovered:
+        return jsonify({"error": "Could not connect or no environments found"}), 400
+    cfg = get_config()
+    existing_names = {e["name"] for e in cfg.get("environments", [])}
+    added = []
+    for env in discovered:
+        name = env.get("name", "default")
+        if name in existing_names:
+            continue
+        env.setdefault("label", name.capitalize())
+        env.setdefault("env_type", "prod")
+        env.setdefault("group", "Default")
+        cfg.setdefault("environments", []).append(env)
+        added.append(env)
+    if added:
+        shconfig.save_config(cfg, CONFIG_PATH)
+    return jsonify({"discovered": discovered, "added": added})
+
+
+# ─── Survey API ───
 
 @app.route("/api/surveys")
 @require_auth
@@ -303,14 +405,21 @@ def api_create_survey():
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON body"}), 400
+    import json as _json
+    print(">>> CREATE SURVEY BODY:", _json.dumps(data, indent=2))
     try:
         client, env_obj = get_client(env)
         data["environmentId"] = env_obj["environment_id"]
+        for ending in data.get("endings", []):
+            if not ending.get("buttonLink"):
+                ending.pop("buttonLabel", None)
         result = client.create_survey(data)
         return jsonify(result), 201
     except FormbricksError as e:
+        print(">>> FORMBRICKS ERROR:", str(e))
         return jsonify({"error": str(e)}), 400
     except Exception as e:
+        print(">>> EXCEPTION:", str(e))
         return jsonify({"error": str(e)}), 400
 
 
@@ -323,6 +432,9 @@ def api_update_survey(survey_id):
         return jsonify({"error": "No JSON body"}), 400
     try:
         client, _ = get_client(env)
+        for ending in data.get("endings", []):
+            if not ending.get("buttonLink"):
+                ending.pop("buttonLabel", None)
         result = client.update_survey(survey_id, data)
         return jsonify(result)
     except FormbricksError as e:
@@ -376,7 +488,7 @@ SURVEY_DOCS_MD = """# Formbricks Survey Structure
 | `questions` | array | ✅ | List of question objects |
 | `welcomeCard` | object | ❌ | Welcome screen before questions |
 | `endings` | array | ❌ | Ending screens (add via PUT) |
-| `displayOption` | string | ❌ | `displayOnce`, `displayMultiple`, `respondOnce` |
+| `displayOption` | string | ❌ | `displayOnce`, `displayMultiple`, `respondMultiple`, `displaySome` |
 | `hiddenFields` | object | ❌ | `{ enabled, fieldIds }` |
 | `variables` | array | ❌ | Survey variables for logic |
 | `singleUse` | object | ❌ | `{ enabled, isEncrypted }` |
@@ -608,6 +720,7 @@ Grid with rows and columns (radio button per row).
 
 ```json
 {
+  "id": "default",
   "type": "endScreen",
   "headline": { "default": "Thank you!" },
   "subheader": { "default": "<p>Your response was saved.</p>" },

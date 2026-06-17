@@ -1,3 +1,11 @@
+/* ─── Helpers ─── */
+function genCuid() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = 'c';
+  for (let i = 0; i < 24; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
 /* ─── State ─── */
 let state = {
   env: '',
@@ -11,7 +19,7 @@ let state = {
     type: 'link',
     status: 'draft',
     welcomeCard: { enabled: true, headline: { default: 'Welcome!' }, subheader: { default: '' }, buttonLabel: { default: 'Start' }, timeToFinish: true, showResponseCount: false },
-    endings: [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }],
+    endings: [{ id: genCuid(), type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' } }],
     questions: [],
     hiddenFields: { enabled: false, fieldIds: [] },
     variables: [],
@@ -40,6 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('download-json-btn').addEventListener('click', downloadJSON);
   document.getElementById('templates-btn').addEventListener('click', openTemplates);
   document.getElementById('import-btn').addEventListener('click', openImport);
+  document.getElementById('env-settings-btn').addEventListener('click', openEnvSettings);
   document.getElementById('modal-close').addEventListener('click', closeTemplates);
   document.getElementById('import-modal-close').addEventListener('click', closeImport);
   document.getElementById('import-fix-btn').addEventListener('click', fixAndLoadJSON);
@@ -50,6 +59,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('eval-grade-btn').addEventListener('click', evalGrade);
   document.getElementById('eval-load-key-btn').addEventListener('click', () => document.getElementById('eval-key-input').click());
   document.getElementById('eval-key-input').addEventListener('change', evalLoadKeyFile);
+  document.getElementById('env-settings-close').addEventListener('click', closeEnvSettings);
+  document.getElementById('env-add-btn').addEventListener('click', showEnvForm);
+  document.getElementById('env-discover-btn').addEventListener('click', showEnvDiscover);
+  document.getElementById('env-form-save').addEventListener('click', saveEnvForm);
+  document.getElementById('env-form-cancel').addEventListener('click', hideEnvForm);
+  document.getElementById('env-disc-go').addEventListener('click', discoverEnvs);
+  document.getElementById('env-disc-cancel').addEventListener('click', hideEnvDiscover);
 });
 
 /* ─── Env ─── */
@@ -183,16 +199,20 @@ async function loadSurvey(id) {
   state.currentSurvey = survey;
   state.editingQuestion = null;
 
+  const validDisplayOptions = ['displayOnce', 'displayMultiple', 'respondMultiple', 'displaySome'];
+  const displayOpt = survey.displayOption && validDisplayOptions.includes(survey.displayOption) ? survey.displayOption : 'displayOnce';
+  const fixedEndings = (survey.endings || []).map(e => e.id ? e : { id: genCuid(), ...e });
+
   state.builder = {
     name: survey.name || '',
     type: survey.type || 'link',
     status: survey.status || 'draft',
     welcomeCard: survey.welcomeCard || state.builder.welcomeCard,
-    endings: survey.endings || [],
+    endings: fixedEndings,
     questions: survey.questions || [],
     hiddenFields: survey.hiddenFields || { enabled: false, fieldIds: [] },
     variables: survey.variables || [],
-    displayOption: survey.displayOption || 'displayOnce',
+    displayOption: displayOpt,
     singleUse: survey.singleUse || { enabled: false, isEncrypted: true },
     recaptcha: survey.recaptcha || { enabled: false, threshold: 0.1 },
   };
@@ -210,7 +230,7 @@ function newSurvey() {
     type: 'link',
     status: 'draft',
     welcomeCard: { enabled: true, headline: { default: 'Welcome!' }, subheader: { default: '' }, buttonLabel: { default: 'Start' }, timeToFinish: true, showResponseCount: false },
-    endings: [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }],
+    endings: [{ id: genCuid(), type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' } }],
     questions: [],
     hiddenFields: { enabled: false, fieldIds: [] },
     variables: [],
@@ -294,7 +314,13 @@ function renderEndings() {
 }
 
 function addEnding() {
-  state.builder.endings.push({ type: 'endScreen', headline: { default: '' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } });
+  const link = getDefaultLink();
+  const ending = { id: genCuid(), type: 'endScreen', headline: { default: '' }, subheader: { default: '' } };
+  if (link) {
+    ending.buttonLabel = { default: 'Cerrar' };
+    ending.buttonLink = link;
+  }
+  state.builder.endings.push(ending);
   renderEndings(); renderJSON();
 }
 
@@ -635,17 +661,30 @@ function updateAdvanced() {
 }
 
 /* ─── JSON ─── */
+function getDefaultLink() {
+  if (state.env === 'vanity') return 'https://vanityexperience.mx/';
+  if (state.env === 'soul23') return 'https://soul23.mx/';
+  return '';
+}
+
 function buildSurveyJSON() {
   const b = state.builder;
+  const validDisplayOptions = ['displayOnce', 'displayMultiple', 'respondMultiple', 'displaySome'];
+  const displayOpt = validDisplayOptions.includes(b.displayOption) ? b.displayOption : 'displayOnce';
+  const endings = (b.endings || []).map(e => {
+    let ending = e.id ? { ...e } : { id: genCuid(), ...e };
+    if (!ending.buttonLink) delete ending.buttonLabel;
+    return ending;
+  });
   const json = {
     name: b.name,
     type: b.type,
     status: b.status,
     welcomeCard: b.welcomeCard,
-    endings: b.endings,
+    endings: endings,
     questions: b.questions,
     hiddenFields: b.hiddenFields,
-    displayOption: b.displayOption,
+    displayOption: displayOpt,
   };
   if (b.singleUse?.enabled) json.singleUse = b.singleUse;
   if (b.recaptcha?.enabled) json.recaptcha = b.recaptcha;
@@ -880,9 +919,16 @@ function fixSurveyJSON(raw) {
   if (!data.name) { data.name = 'Imported Survey'; msgs.push('name'); fixed = true; }
   if (!data.type) { data.type = 'link'; msgs.push('type → link'); fixed = true; }
   if (!data.status) { data.status = 'draft'; msgs.push('status → draft'); fixed = true; }
-  if (!data.displayOption) { data.displayOption = 'displayOnce'; msgs.push('displayOption'); fixed = true; }
+  const validDisplayOptions = ['displayOnce', 'displayMultiple', 'respondMultiple', 'displaySome'];
+  if (!data.displayOption || !validDisplayOptions.includes(data.displayOption)) {
+    data.displayOption = 'displayOnce'; msgs.push('displayOption → displayOnce'); fixed = true;
+  }
   if (!data.thankYouCard) { data.thankYouCard = { enabled: false }; msgs.push('thankYouCard'); fixed = true; }
   if (!data.welcomeCard) { data.welcomeCard = { enabled: false }; msgs.push('welcomeCard'); fixed = true; }
+
+  if (Array.isArray(data.endings)) {
+    data.endings = data.endings.map(e => e.id ? e : { id: genCuid(), ...e });
+  }
 
   if (!data.questions || !Array.isArray(data.questions)) {
     data.questions = [];
@@ -942,7 +988,7 @@ function fixSurveyJSON(raw) {
 
   // Ensure endings array
   if (!data.endings || !Array.isArray(data.endings)) {
-    data.endings = [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }];
+    data.endings = [{ id: genCuid(), type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' } }];
     msgs.push('endings');
     fixed = true;
   }
@@ -984,7 +1030,7 @@ function loadIntoBuilder(data) {
     type: data.type || 'link',
     status: data.status || 'draft',
     welcomeCard: data.welcomeCard || { enabled: true, headline: { default: 'Welcome!' }, subheader: { default: '' }, buttonLabel: { default: 'Start' }, timeToFinish: true, showResponseCount: false },
-    endings: Array.isArray(data.endings) && data.endings.length ? data.endings : [{ type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' }, buttonLabel: { default: 'Close' } }],
+    endings: Array.isArray(data.endings) && data.endings.length ? data.endings : [{ id: genCuid(), type: 'endScreen', headline: { default: 'Thank you!' }, subheader: { default: '' } }],
     questions: Array.isArray(data.questions) ? data.questions : [],
     hiddenFields: data.hiddenFields || { enabled: false, fieldIds: [] },
     variables: Array.isArray(data.variables) ? data.variables : [],
@@ -1129,4 +1175,174 @@ function evalDownloadResults() {
   a.click();
   URL.revokeObjectURL(a.href);
   toast('Results downloaded', 'success');
+}
+
+/* ─── Environment Settings ─── */
+let editingEnvName = null;
+
+function openEnvSettings() {
+  editingEnvName = null;
+  closeImport();
+  closeTemplates();
+  document.getElementById('env-settings-modal').classList.add('open');
+  renderEnvList();
+}
+
+function closeEnvSettings() {
+  document.getElementById('env-settings-modal').classList.remove('open');
+  hideEnvForm();
+  hideEnvDiscover();
+}
+
+function renderEnvList() {
+  const container = document.getElementById('env-list-container');
+  if (!state.envs.length) {
+    container.innerHTML = '<div style="color:var(--text2);font-size:13px">No environments configured. Add one above.</div>';
+    return;
+  }
+  container.innerHTML = state.envs.map((e, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface)">
+      <div style="flex:1">
+        <strong>${esc(e.label || e.name)}</strong>
+        <span style="font-size:11px;margin-left:8px;padding:1px 6px;border-radius:3px;background:${e.env_type==='prod'?'var(--red)':'var(--accent)'};color:#fff">${e.env_type||'dev'}</span>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(e.base_url)} · ${esc(e.environment_id||'no env id')}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-secondary btn-sm" onclick="editEnv('${esc(e.name)}')">✎</button>
+        <button class="btn btn-secondary btn-sm" onclick="deleteEnv('${esc(e.name)}')" style="color:var(--red)">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function showEnvForm(existing) {
+  hideEnvDiscover();
+  const container = document.getElementById('env-form-container');
+  container.style.display = 'block';
+  document.getElementById('env-form-title').textContent = existing ? 'Edit Environment' : 'Add Environment';
+  document.getElementById('env-form-name').value = existing ? existing.name : '';
+  document.getElementById('env-form-name').disabled = !!existing;
+  document.getElementById('env-form-label').value = existing ? (existing.label || '') : '';
+  document.getElementById('env-form-type').value = existing ? (existing.env_type || 'prod') : 'prod';
+  document.getElementById('env-form-group').value = existing ? (existing.group || '') : '';
+  document.getElementById('env-form-url').value = existing ? (existing.base_url || '') : '';
+  document.getElementById('env-form-apikey').value = existing ? (existing.api_key || '') : '';
+  document.getElementById('env-form-envid').value = existing ? (existing.environment_id || '') : '';
+  editingEnvName = existing ? existing.name : null;
+}
+
+function hideEnvForm() {
+  document.getElementById('env-form-container').style.display = 'none';
+  editingEnvName = null;
+}
+
+function showEnvDiscover() {
+  hideEnvForm();
+  document.getElementById('env-discover-container').style.display = 'block';
+  document.getElementById('env-disc-results').textContent = '';
+}
+
+function hideEnvDiscover() {
+  document.getElementById('env-discover-container').style.display = 'none';
+}
+
+async function saveEnvForm() {
+  const name = document.getElementById('env-form-name').value.trim();
+  if (!name) { toast('Name is required', 'error'); return; }
+  const env = {
+    name,
+    label: document.getElementById('env-form-label').value.trim() || name,
+    env_type: document.getElementById('env-form-type').value,
+    group: document.getElementById('env-form-group').value.trim() || name,
+    base_url: document.getElementById('env-form-url').value.trim(),
+    api_key: document.getElementById('env-form-apikey').value.trim(),
+    environment_id: document.getElementById('env-form-envid').value.trim(),
+  };
+  if (!env.base_url || !env.api_key) { toast('Base URL and API key are required', 'error'); return; }
+
+  try {
+    let res;
+    if (editingEnvName) {
+      res = await fetch(`/api/envs/${encodeURIComponent(editingEnvName)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env)
+      });
+    } else {
+      res = await fetch('/api/envs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env)
+      });
+    }
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Error saving environment', 'error'); return; }
+    toast(editingEnvName ? 'Environment updated' : 'Environment added', 'success');
+    hideEnvForm();
+    await refreshEnvs();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editEnv(name) {
+  const env = state.envs.find(e => e.name === name);
+  if (env) showEnvForm(env);
+}
+
+async function deleteEnv(name) {
+  if (!confirm(`Delete environment "${name}"?`)) return;
+  try {
+    const res = await fetch(`/api/envs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    toast('Environment deleted', 'success');
+    await refreshEnvs();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function refreshEnvs() {
+  const res = await fetch('/api/envs');
+  state.envs = await res.json();
+  renderEnvList();
+  // Rebuild env selector
+  const sel = document.getElementById('env-select');
+  const groups = {};
+  state.envs.forEach(e => {
+    const g = e.group || e.label || e.name;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(e);
+  });
+  sel.innerHTML = Object.entries(groups).map(([g, envs]) =>
+    `<optgroup label="${g}">${envs.map(e =>
+      `<option value="${e.name}">${e.env_type || 'dev'}</option>`
+    ).join('')}</optgroup>`
+  ).join('');
+  // Preserve selection
+  if (state.env) sel.value = state.env;
+}
+
+async function discoverEnvs() {
+  const url = document.getElementById('env-disc-url').value.trim() || state.envObj?.base_url || '';
+  const key = document.getElementById('env-disc-apikey').value.trim() || state.envObj?.api_key || '';
+  if (!url || !key) { toast('URL and API key required', 'error'); return; }
+
+  const resultsEl = document.getElementById('env-disc-results');
+  resultsEl.innerHTML = '<div class="loading">Discovering...</div>';
+
+  try {
+    const res = await fetch('/api/envs/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url: url, api_key: key })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      resultsEl.innerHTML = `<div style="color:var(--red)">${data.error || 'Discovery failed'}</div>`;
+      return;
+    }
+    if (data.added && data.added.length) {
+      resultsEl.innerHTML = `<div style="color:var(--green)">✓ Added ${data.added.length} environment(s)</div>`;
+      await refreshEnvs();
+    } else if (data.discovered && data.discovered.length) {
+      resultsEl.innerHTML = `<div style="color:var(--text2)">${data.discovered.length} found but all already exist.</div>`;
+    } else {
+      resultsEl.innerHTML = '<div style="color:var(--text2)">No environments discovered. Add manually.</div>';
+    }
+  } catch(e) {
+    resultsEl.innerHTML = `<div style="color:var(--red)">Error: ${e.message}</div>`;
+  }
 }

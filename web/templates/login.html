@@ -1,31 +1,31 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Formbricks Studio - Soul23</title>
+  <title>Formbricks Studio - Login</title>
   <style>
     :root, [data-theme="dark"] {
-      --bg: #1a1b26;
-      --surface: #24283b;
-      --surface2: #414868;
-      --border: #565f89;
-      --text: #c0caf5;
-      --text2: #a9b1d6;
-      --accent: #7aa2f7;
-      --accent2: #bb9af7;
-      --green: #9ece6a;
-      --red: #f7768e;
+      --bg: #111116;
+      --surface: #1a1a22;
+      --surface2: #2a2a35;
+      --border: #3a3a48;
+      --text: #d4d4dc;
+      --text2: #9494a8;
+      --accent: #818cf8;
+      --accent2: #6366f1;
+      --green: #6ee7b7;
+      --red: #f87171;
     }
     [data-theme="light"] {
-      --bg: #eff1f5;
-      --surface: #e6e9ef;
-      --surface2: #ccd0da;
-      --border: #bcc0cc;
-      --text: #4c4f69;
-      --text2: #6c6f85;
-      --accent: #7287fd;
-      --accent2: #8839ef;
+      --bg: #f5f5f5;
+      --surface: #ffffff;
+      --surface2: #e0e0e0;
+      --border: #cccccc;
+      --text: #1a1a1a;
+      --text2: #666666;
+      --accent: #6366f1;
+      --accent2: #4f46e5;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -58,22 +58,17 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 10px;
     }
     .brand-logo img {
-      height: 40px;
-      filter: invert(1);
+      height: 28px;
+      filter: brightness(0) invert(1);
     }
     .brand-logo h1 {
       font-size: 28px;
       font-weight: 700;
       color: var(--text);
       letter-spacing: -0.02em;
-    }
-    .brand-subtitle {
-      font-size: 14px;
-      color: var(--text2);
     }
     .login-title {
       font-size: 20px;
@@ -144,10 +139,6 @@
       color: var(--text2);
       margin-top: 20px;
     }
-    .hint a {
-      color: var(--accent);
-      text-decoration: none;
-    }
     .footer {
       text-align: center;
       margin-top: 24px;
@@ -164,44 +155,47 @@
     <div class="login-card">
       <div class="brand">
         <div class="brand-logo">
-          <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" alt="Soul23">
-          <h1>Soul23</h1>
+          <img src="https://formbricks.com/_next/static/media/footerlogo-dark.65287927.svg" alt="Formbricks">
+          <h1>Lazy</h1>
         </div>
-        <div class="brand-subtitle">Formbricks Studio</div>
       </div>
-      
+
       <h2 class="login-title">
-        {% if not is_setup %}🔧 Configuración Inicial{% else %}🔐 Iniciar Sesión{% endif %}
+        {% if not is_setup %}🔧 Initial Setup{% else %}🔐 Sign In{% endif %}
       </h2>
-      
+
       {% if error %}
       <div class="error">{{ error }}</div>
       {% endif %}
-      
+
       <form method="POST">
         <div class="form-group">
-          <label>Usuario</label>
+          <label>Username</label>
           <input type="text" name="username" required autocomplete="username" autofocus>
         </div>
         <div class="form-group">
-          <label>Contraseña</label>
+          <label>Password</label>
           <input type="password" name="password" required autocomplete="current-password">
         </div>
         <button type="submit" class="btn btn-primary">
-          {% if not is_setup %}Crear Cuenta{% else %}Entrar{% endif %}
+          {% if not is_setup %}Create Account{% else %}Sign In{% endif %}
         </button>
       </form>
-      
+
       <div class="hint">
         {% if not is_setup %}
-          Crea tu usuario y contraseña para acceder al sistema
-        {% else %}
-          ¿Olvidaste tu contraseña? <a href="#">Recuperar</a>
+          Create your first user to access the system
         {% endif %}
       </div>
-      
+
       <div class="footer">
-        Desarrollado por <strong>Grupo AlMa del Norte</strong>
+        <div>made by &amp; for lazy people who don't like repetitive tasks</div>
+        <div style="margin-top:8px;opacity:.4">
+          <a href="https://soul23.mx" target="_blank" rel="noopener">
+            <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/s23_logo.svg" alt="Soul23" style="height:28px;filter:brightness(0) invert(1)">
+          </a>
+        </div>
+      </div>
       </div>
     </div>
   </div>

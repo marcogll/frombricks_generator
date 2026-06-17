@@ -9,10 +9,13 @@ import io
 from rich.prompt import Prompt
 
 from client.formbricks import FormbricksClient, FormbricksError
+import shared.config as shconfig
+from shared.config import load_config, save_config, env_defaults, ensure_config, validate_config
 from ui.tui import (
     console,
     show_header,
     show_menu,
+    manage_environments_menu,
     select_env,
     show_surveys,
     show_json,
@@ -29,23 +32,12 @@ from ui.tui import (
 )
 
 
-def load_config(path: str) -> dict:
-    if not os.path.exists(path):
-        alt = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-        if os.path.exists(alt):
-            path = alt
-        else:
-            console.print(f"[red]Config file not found: {path}[/red]")
-            console.print("[yellow]Copy config.example.json to config.json and edit it[/yellow]")
-            sys.exit(1)
-    with open(path) as f:
-        return json.load(f)
-
-
 def get_client(config: dict, env_name: str = None) -> tuple:
     envs = config.get("environments", [])
     if not envs:
         console.print("[red]No environments configured[/red]")
+        console.print("[yellow]Use: python main.py manage-envs[/yellow]")
+        console.print("[yellow]Or set FORMBRICKS_BASE_URL + FORMBRICKS_API_KEY in .env[/yellow]")
         sys.exit(1)
     if env_name:
         env = next((e for e in envs if e["name"] == env_name), None)
@@ -55,7 +47,7 @@ def get_client(config: dict, env_name: str = None) -> tuple:
     else:
         env = envs[0]
     client = FormbricksClient(
-        env["base_url"], env["api_key"], env["environment_id"]
+        env["base_url"], env["api_key"], env.get("environment_id", "")
     )
     return client, env
 
@@ -266,19 +258,135 @@ def cmd_eval_export(client, env, survey_id, output):
         console.print(out)
 
 
+# ---- Environment management ----
+
+def cmd_list_envs(config):
+    envs = config.get("environments", [])
+    if not envs:
+        log_warn("No environments configured")
+        return
+    table_data = []
+    for env in envs:
+        url = env.get("base_url", "")
+        eid = env.get("environment_id", "")
+        label = env.get("label") or env.get("name", "")
+        env_type = env.get("env_type", "")
+        group = env.get("group", "")
+        table_data.append({"name": env["name"], "label": label,
+                           "type": env_type, "group": group,
+                           "url": url, "env_id": eid})
+    show_envs_table(table_data)
+
+
+def show_envs_table(envs: list[dict]):
+    from rich.table import Table
+    from rich import box
+    table = Table(title="Environments", box=box.ROUNDED)
+    table.add_column("Name", style="cyan")
+    table.add_column("Label")
+    table.add_column("Type", style="yellow")
+    table.add_column("Group")
+    table.add_column("Base URL", style="blue")
+    table.add_column("Env ID")
+    for e in envs:
+        table.add_row(e["name"], e["label"], e["type"],
+                      e["group"], e["url"], e["env_id"])
+    console.print(table)
+
+
+def cmd_add_env(config, config_path):
+    from ui.tui import prompt_env_config
+    env = prompt_env_config()
+    if env:
+        config["environments"].append(env)
+        save_config(config, config_path)
+        log_ok(f"Environment '{env['name']}' added")
+
+
+def cmd_edit_env(config, config_path, env_name):
+    envs = config.get("environments", [])
+    env = next((e for e in envs if e["name"] == env_name), None)
+    if not env:
+        log_error(f"Environment '{env_name}' not found")
+        return
+    from ui.tui import prompt_env_config
+    updated = prompt_env_config(existing=env)
+    if updated:
+        env.update(updated)
+        save_config(config, config_path)
+        log_ok(f"Environment '{env_name}' updated")
+
+
+def cmd_delete_env(config, config_path, env_name):
+    envs = config.get("environments", [])
+    env = next((e for e in envs if e["name"] == env_name), None)
+    if not env:
+        log_error(f"Environment '{env_name}' not found")
+        return
+    label = env.get("label") or env["name"]
+    if Prompt.ask(f"[bold red]Delete '{label}'?[/bold red]", choices=["y", "n"], default="n") != "y":
+        return
+    config["environments"] = [e for e in envs if e["name"] != env_name]
+    save_config(config, config_path)
+    log_ok(f"Environment '{label}' deleted")
+
+
+def cmd_discover(config, config_path):
+    defaults = env_defaults()
+    base_url = defaults.get("base_url") or Prompt.ask("[bold]Formbricks base URL")
+    api_key = defaults.get("api_key") or Prompt.ask("[bold]API key")
+    if not base_url or not api_key:
+        log_error("Base URL and API key are required")
+        return
+    log_ok(f"Connecting to {base_url}...")
+    discovered = FormbricksClient.discover_environments(base_url, api_key)
+    if not discovered:
+        log_error("Could not connect or no environments found")
+        log_warn("Add environments manually with: python main.py manage-envs")
+        return
+    existing_names = {e["name"] for e in config.get("environments", [])}
+    added = 0
+    for env in discovered:
+        name = env.get("name", "default")
+        if name in existing_names:
+            log_warn(f"Environment '{name}' already exists, skipping")
+            continue
+        env.setdefault("label", name.capitalize())
+        env.setdefault("env_type", "prod")
+        env.setdefault("group", "Default")
+        config.setdefault("environments", []).append(env)
+        added += 1
+    if added:
+        save_config(config, config_path)
+        log_ok(f"Discovered and added {added} environment(s)")
+    else:
+        log_warn("No new environments to add")
+
+
 # ---- Interactive mode ----
 
-def interactive_mode(config):
+def interactive_mode(config, config_path):
     envs = config.get("environments", [])
     if not envs:
         console.print("[red]No environments configured[/red]")
+        console.print("[yellow]Options:[/yellow]")
+        console.print("  1. Auto-discover from API key")
+        console.print("  2. Add environment manually")
+        console.print("  3. Exit")
+        choice = Prompt.ask("[bold]Choose", choices=["1", "2", "3"], default="1")
+        if choice == "1":
+            cmd_discover(config, config_path)
+            return interactive_mode(load_config(config_path), config_path)
+        elif choice == "2":
+            cmd_add_env(config, config_path)
+            return interactive_mode(load_config(config_path), config_path)
         return
 
     current_env = envs[0]
     client = FormbricksClient(
         current_env["base_url"],
         current_env["api_key"],
-        current_env["environment_id"],
+        current_env.get("environment_id", ""),
     )
 
     while True:
@@ -317,12 +425,12 @@ def interactive_mode(config):
                     client = FormbricksClient(
                         sel["base_url"],
                         sel["api_key"],
-                        sel["environment_id"],
+                        sel.get("environment_id", ""),
                     )
             elif choice == 8:
                 data = prompt_load_json_file()
                 if data:
-                    data["environmentId"] = current_env["environment_id"]
+                    data["environmentId"] = current_env.get("environment_id", "")
                     data = validate_survey_draft(data)
                     show_json(data)
                     if Prompt.ask("[bold]Send to API?", choices=["y", "n"], default="n") == "y":
@@ -336,21 +444,34 @@ def interactive_mode(config):
                     output = Prompt.ask("[bold]Output file", default=f"{s['name'].replace(' ', '_')}.json")
                     cmd_export_survey(client, current_env, s["id"], output)
             elif choice == 10:
+                result = manage_environments_menu(config, config_path)
+                if result == "reload":
+                    config = load_config(config_path)
+                    envs = config.get("environments", [])
+                    if current_env and not any(e["name"] == current_env["name"] for e in envs):
+                        current_env = envs[0] if envs else None
+                        if current_env:
+                            client = FormbricksClient(
+                                current_env["base_url"],
+                                current_env["api_key"],
+                                current_env.get("environment_id", ""),
+                            )
+            elif choice == 11:
                 console.print("[cyan]Goodbye![/cyan]")
                 break
         except FormbricksError as e:
             log_error("API request failed", str(e))
 
-        if choice != 10:
+        if choice != 11:
             Prompt.ask("\n[dim]Press Enter to continue...[/dim]", default="")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Formbricks CLI Manager - TUI & headless mode"
+        description="Formbricks Studio - Survey manager for Formbricks"
     )
     parser.add_argument(
-        "--config", "-c", default="config.json", help="Config file path"
+        "--config", "-c", default=None, help="Config file path (default: auto-detect)"
     )
     parser.add_argument("--env", "-e", default=None, help="Environment name")
 
@@ -359,6 +480,21 @@ def main():
     sub.add_parser("interactive", help="Run in interactive TUI mode")
 
     sub.add_parser("list", help="List surveys")
+
+    sub.add_parser("list-envs", help="List configured environments")
+
+    p_discover = sub.add_parser("discover", help="Auto-discover environments from API")
+    p_discover.add_argument("--url", help="Formbricks base URL")
+    p_discover.add_argument("--api-key", help="Formbricks API key")
+
+    sub_me = sub.add_parser("manage-envs", help="Manage environments")
+    me_sub = sub_me.add_subparsers(dest="me_command")
+    me_sub.add_parser("list", help="List environments")
+    me_sub.add_parser("add", help="Add environment (interactive)")
+    p_me_edit = me_sub.add_parser("edit", help="Edit environment")
+    p_me_edit.add_argument("env_name")
+    p_me_delete = me_sub.add_parser("delete", help="Delete environment")
+    p_me_delete.add_argument("env_name")
 
     p_view = sub.add_parser("view", help="View survey raw JSON")
     p_view.add_argument("survey_id")
@@ -405,10 +541,43 @@ def main():
     p_ee.add_argument("--output", "-o", help="Output CSV file")
 
     args = parser.parse_args()
-    config = load_config(args.config)
+    config_path = args.config
+    config_path_used = config_path or shconfig.find_config()
+
+    if args.command != "serve":
+        config_path_used = ensure_config(config_path)
+
+    config = load_config(config_path_used)
+
+    warnings = validate_config(config)
+    for w in warnings:
+        log_warn(w)
 
     if not args.command or args.command == "interactive":
-        interactive_mode(config)
+        interactive_mode(config, config_path_used)
+        return
+
+    if args.command == "list-envs":
+        cmd_list_envs(config)
+        return
+
+    if args.command == "manage-envs":
+        if not args.me_command or args.me_command == "list":
+            cmd_list_envs(config)
+        elif args.me_command == "add":
+            cmd_add_env(config, config_path_used)
+        elif args.me_command == "edit":
+            cmd_edit_env(config, config_path_used, args.env_name)
+        elif args.me_command == "delete":
+            cmd_delete_env(config, config_path_used, args.env_name)
+        return
+
+    if args.command == "discover":
+        if args.url:
+            os.environ["FORMBRICKS_BASE_URL"] = args.url
+        if args.api_key:
+            os.environ["FORMBRICKS_API_KEY"] = args.api_key
+        cmd_discover(config, config_path_used)
         return
 
     client, env = get_client(config, args.env)

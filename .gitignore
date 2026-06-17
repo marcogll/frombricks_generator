@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 .env
+config.json
+config.toml
+config.yaml
+config.yml
 auth.json
 venv/
 .venv/
@@ -12,3 +16,6 @@ build/
 htmlcov/
 .DS_Store
 *.log
+.vscode/
+survey.json
+funnel.json

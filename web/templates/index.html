@@ -3,26 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Formbricks Survey Builder</title>
+<title>{{ brand }} - Survey Builder</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <a href="https://soul23.mx" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;text-decoration:none">
-      <img class="logo-img" src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo.svg" alt="Soul23">
-      <div class="brand-text">
-        <h1>Formbricks Studio</h1>
-        <div class="subtitle">Survey Builder — drag-free visual editor</div>
-      </div>
-    </a>
+    <img class="logo-img" src="https://formbricks.com/_next/static/media/footerlogo-dark.65287927.svg" alt="Formbricks">
+    <div class="brand-text">
+      <h1>Lazy</h1>
+    </div>
   </div>
   <div class="env-bar">
-    <button class="btn-logout" onclick="window.location.href='/logout'" title="Cerrar sesión">🚪</button>
+    <button class="btn-logout" onclick="window.location.href='/logout'" title="Logout">🚪</button>
     <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
     <label style="font-size:12px;color:var(--text2)">Environment:</label>
     <select id="env-select"></select>
+    <button class="btn btn-secondary btn-sm" id="env-settings-btn">⚙️ Envs</button>
     <button class="btn btn-secondary btn-sm" id="new-survey-btn">+ New</button>
     <button class="btn btn-secondary btn-sm" id="templates-btn">📦 Templates</button>
     <button class="btn btn-primary btn-sm" id="save-survey-btn">💾 Save</button>
@@ -77,7 +75,7 @@
           <select id="display-option" onchange="state.builder.displayOption=this.value;renderJSON()">
             <option value="displayOnce">Once</option>
             <option value="displayMultiple">Multiple</option>
-            <option value="respondOnce">Respond Once</option>
+            <option value="respondMultiple">Respond Multiple</option>
           </select>
         </div>
       </div>
@@ -197,17 +195,60 @@
 
 <footer>
   <div class="footer-inner">
-    <div class="footer-brand">
-      <a href="https://soul23.mx" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;text-decoration:none;color:inherit">
-        <img class="logo-img" src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/s23_logo.svg" alt="Soul23" style="height:20px">
-        <span class="footer-title">Soul23</span>
+    <div class="footer-copy">made by &amp; for lazy people who don't like repetitive tasks</div>
+    <div class="footer-soul">
+      <a href="https://soul23.mx" target="_blank" rel="noopener">
+        <img src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/s23_logo.svg" alt="Soul23">
       </a>
-      <span class="footer-sep">·</span>
-      <span class="footer-sub">Formbricks Studio</span>
     </div>
-    <div class="footer-copy">Todos los derechos reservados · Grupo AlMa del Norte</div>
   </div>
 </footer>
+
+<!-- Environment Settings Modal -->
+<div class="modal-overlay" id="env-settings-modal">
+  <div class="modal" style="max-width:800px">
+    <button class="modal-close" id="env-settings-close">✕</button>
+    <h2>⚙️ Environment Settings</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Manage your Formbricks environments. Changes are saved to config file.</p>
+
+    <div style="margin-bottom:16px;display:flex;gap:8px">
+      <button class="btn btn-secondary btn-sm" id="env-add-btn">+ Add Environment</button>
+      <button class="btn btn-secondary btn-sm" id="env-discover-btn">🔍 Auto-discover</button>
+    </div>
+
+    <div style="max-height:500px;overflow-y:auto" id="env-list-container"></div>
+
+    <div id="env-form-container" style="display:none;margin-top:16px;padding:16px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+      <h3 id="env-form-title" style="margin-bottom:12px">Add Environment</h3>
+      <div class="form-row"><label>Name *</label><input id="env-form-name" placeholder="e.g. production"></div>
+      <div class="form-row"><label>Display Label</label><input id="env-form-label" placeholder="e.g. My App Prod"></div>
+      <div class="form-row-inline">
+        <div class="form-row" style="flex:1"><label>Type</label>
+          <select id="env-form-type"><option value="prod">Production</option><option value="staging">Staging</option><option value="dev">Development</option></select>
+        </div>
+        <div class="form-row" style="flex:1"><label>Group</label><input id="env-form-group" placeholder="e.g. My App"></div>
+      </div>
+      <div class="form-row"><label>Base URL *</label><input id="env-form-url" placeholder="https://app.formbricks.com"></div>
+      <div class="form-row"><label>API Key *</label><input id="env-form-apikey" placeholder="fbk_..." type="password"></div>
+      <div class="form-row"><label>Environment ID</label><input id="env-form-envid" placeholder="env-..."></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" id="env-form-save">💾 Save</button>
+        <button class="btn btn-secondary btn-sm" id="env-form-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div id="env-discover-container" style="display:none;margin-top:16px;padding:16px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+      <h3 style="margin-bottom:12px">🔍 Auto-discover Environments</h3>
+      <div class="form-row"><label>Base URL</label><input id="env-disc-url" placeholder="https://app.formbricks.com"></div>
+      <div class="form-row"><label>API Key</label><input id="env-disc-apikey" placeholder="fbk_..." type="password"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" id="env-disc-go">🔍 Discover</button>
+        <button class="btn btn-secondary btn-sm" id="env-disc-cancel">Cancel</button>
+      </div>
+      <div id="env-disc-results" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

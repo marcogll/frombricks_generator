@@ -1,47 +1,47 @@
-/* ─── Catppuccin Theme Variables ─── */
+/* ─── Theme Variables ─── */
 :root,
 [data-theme="dark"] {
-  --bg: #303446;
-  --bg-deeper: #232634;
-  --surface: #292c3c;
-  --surface2: #414559;
-  --border: #51576d;
-  --text: #c6d0f5;
-  --text2: #a5adce;
-  --accent: #babbf1;
-  --accent2: #8caaee;
-  --green: #a6d189;
-  --red: #e78284;
-  --yellow: #e5c890;
-  --peach: #ef9f76;
-  --mauve: #ca9ee6;
-  --blue: #8caaee;
+  --bg: #111116;
+  --bg-deeper: #0a0a0e;
+  --surface: #1a1a22;
+  --surface2: #2a2a35;
+  --border: #3a3a48;
+  --text: #d4d4dc;
+  --text2: #9494a8;
+  --accent: #818cf8;
+  --accent2: #6366f1;
+  --green: #6ee7b7;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --peach: #fb923c;
+  --mauve: #c084fc;
+  --blue: #60a5fa;
   --radius: 8px;
   --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  --logo-filter: invert(1);
-  --overlay: rgba(0,0,0,.6);
-  --shadow: rgba(0,0,0,.3);
+  --logo-filter: brightness(0) invert(1);
+  --overlay: rgba(0,0,0,.7);
+  --shadow: rgba(0,0,0,.5);
 }
 [data-theme="light"] {
-  --bg: #eff1f5;
-  --bg-deeper: #dce0e8;
-  --surface: #e6e9ef;
-  --surface2: #ccd0da;
-  --border: #bcc0cc;
-  --text: #4c4f69;
-  --text2: #6c6f85;
-  --accent: #7287fd;
-  --accent2: #1e66f5;
-  --green: #40a02b;
-  --red: #d20f39;
-  --yellow: #df8e1d;
-  --peach: #fe640b;
-  --mauve: #8839ef;
-  --blue: #1e66f5;
+  --bg: #f5f5f5;
+  --bg-deeper: #e8e8e8;
+  --surface: #ffffff;
+  --surface2: #e0e0e0;
+  --border: #cccccc;
+  --text: #1a1a1a;
+  --text2: #666666;
+  --accent: #6366f1;
+  --accent2: #4f46e5;
+  --green: #16a34a;
+  --red: #dc2626;
+  --yellow: #ca8a04;
+  --peach: #ea580c;
+  --mauve: #9333ea;
+  --blue: #2563eb;
   --logo-filter: none;
-  --overlay: rgba(0,0,0,.2);
-  --shadow: rgba(0,0,0,.1);
+  --overlay: rgba(0,0,0,.15);
+  --shadow: rgba(0,0,0,.08);
 }
 
 /* ─── Reset ─── */
@@ -371,6 +371,9 @@ footer .footer-title { font-weight: 600; color: var(--text); }
 footer .footer-sep { color: var(--border); }
 footer .footer-sub { color: var(--text2); }
 footer .footer-copy { font-size: 11px; opacity: .7; }
+footer .footer-soul { margin-top: 4px; }
+footer .footer-soul img { height: 28px; opacity: .35; filter: var(--logo-filter); transition: opacity .2s; }
+footer .footer-soul img:hover { opacity: .7; }
 
 /* ─── Evaluation ─── */
 .stat-box {

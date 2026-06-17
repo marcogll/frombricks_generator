@@ -1,30 +1,37 @@
 #!/usr/bin/env python3
+"""Generate .env from existing config.json/config.toml for Docker deployment."""
 import json
 import os
 import sys
 
-config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.config import load_config, find_config, env_defaults
+
+config_path = find_config()
+cfg = load_config(config_path)
+
+envs = cfg.get("environments", [])
+defaults = env_defaults()
+
+lines = [
+    "# Auto-generated from config file",
+    "# Do NOT commit this file - contains API keys",
+    "",
+    f"PORT={os.environ.get('PORT', '23457')}",
+    f"FLASK_DEBUG={os.environ.get('FLASK_DEBUG', '0')}",
+]
+
+if defaults.get("base_url") or envs:
+    url = defaults.get("base_url") or envs[0].get("base_url", "")
+    lines.append(f'FORMBRICKS_BASE_URL={url}')
+
+if defaults.get("api_key") or envs:
+    key = defaults.get("api_key") or envs[0].get("api_key", "")
+    lines.append(f'FORMBRICKS_API_KEY={key}')
+
 output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-
-if not os.path.exists(config_path):
-    print("Error: config.json no encontrado")
-    sys.exit(1)
-
-with open(config_path) as f:
-    config = json.load(f)
-
-envs_json = json.dumps(config.get("environments", []), ensure_ascii=False)
-
-env_content = f"""# Auto-generado desde config.json
-# NO comprometer este archivo - contiene API keys
-
-PORT=23457
-FLASK_DEBUG=0
-FORMBRICKS_ENVIRONMENTS='{env_json}'
-"""
-
 with open(output_path, "w") as f:
-    f.write(env_content)
+    f.write("\n".join(lines) + "\n")
 
-print(f".env generado en: {output_path}")
-print("Recuerda agregar .env a .gitignore si no lo tienes")
+print(f".env generated at: {output_path}")
+print("Add .env to your .gitignore if not already done.")

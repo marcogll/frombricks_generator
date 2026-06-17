@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  formbricks-generator:
+  formbricks-studio:
     build: .
     container_name: formbricks-studio
     ports:
@@ -9,7 +9,11 @@ services:
     environment:
       - PORT=23457
       - FLASK_DEBUG=0
-      - FORMBRICKS_ENVIRONMENTS=${FORMBRICKS_ENVIRONMENTS}
+      - FORMBRICKS_BASE_URL=${FORMBRICKS_BASE_URL}
+      - FORMBRICKS_API_KEY=${FORMBRICKS_API_KEY}
+    volumes:
+      - ./config.toml:/app/config.toml
+      - ./auth.json:/app/auth.json
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:23457/"]

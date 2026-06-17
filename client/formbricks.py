@@ -8,7 +8,7 @@ class FormbricksError(Exception):
 
 
 class FormbricksClient:
-    def __init__(self, base_url: str, api_key: str, environment_id: str):
+    def __init__(self, base_url: str, api_key: str, environment_id: str = ""):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.environment_id = environment_id
@@ -37,6 +37,10 @@ class FormbricksClient:
         if isinstance(body, dict) and "data" in body:
             return body["data"]
         return body
+
+    def _request_raw(self, method: str, path: str, **kwargs) -> requests.Response:
+        url = f"{self.base_url}{path}"
+        return self.session.request(method, url, **kwargs)
 
     def list_surveys(self) -> list[dict]:
         return self._request("GET", "/api/v1/management/surveys")
@@ -69,6 +73,112 @@ class FormbricksClient:
         return self._request(
             "GET", f"/api/v1/management/responses?surveyId={survey_id}"
         )
+
+    def list_environments(self) -> list[dict]:
+        resp = self._request_raw("GET", "/api/v1/management/environments")
+        if resp.status_code == 404:
+            return []
+        if resp.status_code in (401, 403):
+            return []
+        resp.raise_for_status()
+        body = resp.json()
+        if isinstance(body, dict) and "data" in body:
+            return body["data"]
+        return body if isinstance(body, list) else []
+
+    def list_environments_via_me(self) -> dict | None:
+        resp = self._request_raw("GET", "/api/v1/management/me")
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+
+    def discover_from_surveys(self) -> list[dict]:
+        try:
+            surveys = self.list_surveys()
+        except FormbricksError:
+            return []
+        seen = {}
+        for s in surveys:
+            eid = s.get("environmentId")
+            if eid and eid not in seen:
+                seen[eid] = {
+                    "name": f"env_{eid[:8]}",
+                    "label": f"Environment {eid[:8]}",
+                    "env_type": "prod",
+                    "group": "Discovered",
+                    "base_url": self.base_url,
+                    "api_key": self.api_key,
+                    "environment_id": eid,
+                }
+        return list(seen.values())
+
+    def verify_connection(self) -> bool:
+        try:
+            self._request("GET", "/api/v1/management/surveys?limit=1")
+            return True
+        except FormbricksError:
+            return False
+
+    def connection_scope(self) -> str:
+        resp = self._request_raw("GET", "/api/v1/management/me")
+        if resp.status_code == 200:
+            return "organization"
+        if resp.status_code == 400:
+            return "environment"
+        if resp.status_code in (401, 403):
+            return "invalid"
+        return "unknown"
+
+    @staticmethod
+    def discover_environments(base_url: str, api_key: str) -> list[dict]:
+        client = FormbricksClient(base_url, api_key)
+
+        envs = client.list_environments()
+        if envs:
+            return envs
+
+        me_data = client.list_environments_via_me()
+        if me_data:
+            perms = me_data.get("environmentPermissions") or []
+            if perms:
+                return [
+                    {
+                        "name": p["projectName"].lower().replace(" ", "-"),
+                        "label": p["projectName"],
+                        "env_type": p["environmentType"],
+                        "group": p["projectName"],
+                        "base_url": base_url,
+                        "api_key": api_key,
+                        "environment_id": p["environmentId"],
+                    }
+                    for p in perms
+                ]
+            project = me_data.get("project")
+            if project:
+                return [{
+                    "name": project["name"].lower().replace(" ", "-"),
+                    "label": project["name"],
+                    "env_type": me_data.get("type", "production"),
+                    "group": project["name"],
+                    "base_url": base_url,
+                    "api_key": api_key,
+                    "environment_id": me_data["id"],
+                }]
+
+        envs = client.discover_from_surveys()
+        if envs:
+            return envs
+
+        connected = client.verify_connection()
+        scope = client.connection_scope()
+        if connected:
+            hint = ""
+            if scope == "environment":
+                hint = (" (API key is scoped to one environment — "
+                        "use an organization-level key to auto-discover all)")
+            return [{"name": "default", "label": f"Default{hint}", "env_type": "prod",
+                     "base_url": base_url, "api_key": api_key}]
+        return []
 
     @staticmethod
     def validate_json(raw: str) -> dict:

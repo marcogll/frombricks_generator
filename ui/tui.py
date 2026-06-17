@@ -4,10 +4,14 @@ from rich.panel import Panel
 from rich.prompt import Prompt, IntPrompt
 from rich import box
 from typing import Optional
-import json, os, sys
+import json, os, sys, secrets, string
 from pathlib import Path
 
 console = Console()
+
+def gen_cuid() -> str:
+    chars = string.ascii_lowercase + string.digits
+    return 'c' + ''.join(secrets.choice(chars) for _ in range(24))
 
 def log_error(msg: str, detail: str = ""):
     console.print(f"[red]✖ {msg}[/red]")
@@ -66,7 +70,7 @@ def show_header(env: dict):
     console.print()
     console.print(
         Panel.fit(
-            f"[bold cyan]Formbricks CLI Manager[/bold cyan]\n"
+            f"[bold cyan]Lazy[/bold cyan] [dim]Formbricks Studio[/dim]\n"
             f"[yellow]Current env:[/yellow] [green]{header_text}[/green]",
             border_style="blue",
         )
@@ -85,8 +89,9 @@ def show_menu() -> int:
     console.print("  [bold cyan]7.[/bold cyan] Switch environment")
     console.print("  [bold cyan]8.[/bold cyan] Load survey from JSON file")
     console.print("  [bold cyan]9.[/bold cyan] Export survey as JSON file")
-    console.print("  [bold cyan]10.[/bold cyan] Exit")
-    return IntPrompt.ask("\n[bold]Select option", default=10)
+    console.print("  [bold cyan]10.[/bold cyan] Manage environments")
+    console.print("  [bold cyan]11.[/bold cyan] Exit")
+    return IntPrompt.ask("\n[bold]Select option", default=11)
 
 
 def select_env(envs: list[dict]) -> Optional[dict]:
@@ -171,14 +176,15 @@ def prompt_endings() -> list[dict]:
     console.print("\n[bold cyan]── Thank You / End Screen ──[/bold cyan]")
     if _yn("Add an ending screen?"):
         ending = {
+            "id": gen_cuid(),
             "type": "endScreen",
         }
         ending["headline"] = _i18n_field("Headline")
         ending["subheader"] = _i18n_field("Subheader (HTML supported)")
-        ending["buttonLabel"] = _i18n_field("Button label (optional)")
         btn_link = Prompt.ask("[bold]Button link URL (optional)", default="")
         if btn_link:
             ending["buttonLink"] = btn_link
+            ending["buttonLabel"] = _i18n_field("Button label")
         endings.append(ending)
     return endings
 
@@ -477,6 +483,157 @@ def prompt_load_json_file() -> dict | None:
     console.print(f"  [dim]Status:[/dim] {data.get('status', '(not set)')}")
 
     return data
+
+
+def prompt_env_config(existing: dict | None = None) -> dict:
+    console.print("\n[bold cyan]═══ Environment Configuration ═══[/bold cyan]")
+    prefix = ""
+    if existing:
+        prefix = f"({existing.get('name', '?')}) "
+        console.print(f"[dim]Editing {existing.get('name')}[/dim]")
+
+    name = Prompt.ask(f"[bold]{prefix}Environment name[/bold]", default=existing.get("name", "") if existing else "")
+    label = Prompt.ask(f"[bold]{prefix}Display label[/bold]", default=existing.get("label", name) if existing else name)
+    env_type = Prompt.ask(f"[bold]{prefix}Type (prod/dev/staging)[/bold]", default=existing.get("env_type", "prod") if existing else "prod")
+    group = Prompt.ask(f"[bold]{prefix}Group[/bold]", default=existing.get("group", "") if existing else "")
+    base_url = Prompt.ask(f"[bold]{prefix}Base URL[/bold]", default=existing.get("base_url", "") if existing else "")
+    api_key = Prompt.ask(f"[bold]{prefix}API key[/bold]", default=existing.get("api_key", "") if existing else "")
+    environment_id = Prompt.ask(f"[bold]{prefix}Environment ID[/bold]", default=existing.get("environment_id", "") if existing else "")
+
+    if existing:
+        result = dict(existing)
+        if name: result["name"] = name
+        if label: result["label"] = label
+        if env_type: result["env_type"] = env_type
+        if group: result["group"] = group
+        if base_url: result["base_url"] = base_url
+        if api_key: result["api_key"] = api_key
+        if environment_id: result["environment_id"] = environment_id
+        return result
+
+    return {
+        "name": name,
+        "label": label,
+        "env_type": env_type,
+        "group": group,
+        "base_url": base_url,
+        "api_key": api_key,
+        "environment_id": environment_id,
+    }
+
+
+def manage_environments_menu(config: dict, config_path: str) -> str | None:
+    from shared.config import save_config
+    envs = config.get("environments", [])
+
+    while True:
+        console.print("\n[bold cyan]═══ Environment Manager ═══[/bold cyan]")
+        console.print("  [bold cyan]1.[/bold cyan] List environments")
+        console.print("  [bold cyan]2.[/bold cyan] Add environment")
+        console.print("  [bold cyan]3.[/bold cyan] Edit environment")
+        console.print("  [bold cyan]4.[/bold cyan] Delete environment")
+        console.print("  [bold cyan]5.[/bold cyan] Discover environments from API")
+        console.print("  [bold cyan]6.[/bold cyan] Back to main menu")
+        choice = IntPrompt.ask("\n[bold]Select option", default=6)
+
+        if choice == 1 or choice == 4:
+            if not envs:
+                console.print("[yellow]No environments configured[/yellow]")
+                if choice == 4:
+                    Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+                    continue
+            if choice == 1:
+                from rich.table import Table
+                from rich import box
+                table = Table(title="Environments", box=box.ROUNDED)
+                table.add_column("#", style="cyan")
+                table.add_column("Name", style="green")
+                table.add_column("Label")
+                table.add_column("Type", style="yellow")
+                table.add_column("Group")
+                table.add_column("Base URL", style="blue")
+                table.add_column("Env ID")
+                for i, e in enumerate(envs, 1):
+                    table.add_row(str(i), e.get("name", ""), e.get("label", ""),
+                                  e.get("env_type", ""), e.get("group", ""),
+                                  e.get("base_url", ""), e.get("environment_id", ""))
+                console.print(table)
+
+        if choice == 2:
+            env = prompt_env_config()
+            if env and env.get("name"):
+                if any(e["name"] == env["name"] for e in envs):
+                    log_warn(f"Environment '{env['name']}' already exists")
+                else:
+                    config["environments"].append(env)
+                    save_config(config, config_path)
+                    log_ok(f"Environment '{env['name']}' added")
+                    envs = config["environments"]
+            Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+
+        elif choice == 3:
+            if not envs:
+                Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+                continue
+            sel = select_env(envs)
+            if sel:
+                updated = prompt_env_config(existing=sel)
+                if updated:
+                    idx = next(i for i, e in enumerate(envs) if e["name"] == sel["name"])
+                    config["environments"][idx] = updated
+                    save_config(config, config_path)
+                    log_ok(f"Environment '{sel['name']}' updated")
+            Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+
+        elif choice == 4:
+            if not envs:
+                continue
+            sel = select_env(envs)
+            if sel:
+                if _yn(f"Delete '{sel.get('label', sel['name'])}'?", "n"):
+                    config["environments"] = [e for e in envs if e["name"] != sel["name"]]
+                    save_config(config, config_path)
+                    log_ok(f"Environment '{sel['name']}' deleted")
+                    envs = config["environments"]
+            Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+
+        elif choice == 5:
+            from shared.config import env_defaults
+            from client.formbricks import FormbricksClient
+            defaults = env_defaults()
+            base_url = Prompt.ask("[bold]Formbricks base URL[/bold]", default=defaults.get("base_url", ""))
+            api_key = Prompt.ask("[bold]API key[/bold]", default=defaults.get("api_key", ""))
+            if base_url and api_key:
+                log_ok(f"Connecting to {base_url}...")
+                discovered = FormbricksClient.discover_environments(base_url, api_key)
+                if discovered:
+                    existing_names = {e["name"] for e in envs}
+                    added = 0
+                    for env in discovered:
+                        name = env.get("name", "default")
+                        if name in existing_names:
+                            log_warn(f"'{name}' already exists, skipping")
+                            continue
+                        env.setdefault("label", name.capitalize())
+                        env.setdefault("env_type", "prod")
+                        env.setdefault("group", "Default")
+                        config["environments"].append(env)
+                        added += 1
+                    if added:
+                        save_config(config, config_path)
+                        log_ok(f"Added {added} environment(s)")
+                        envs = config["environments"]
+                    else:
+                        log_warn("No new environments discovered")
+                else:
+                    log_error("Could not connect or no environments found")
+                    log_warn("Add manually via option 2")
+            Prompt.ask("\n[dim]Press Enter...[/dim]", default="")
+
+        elif choice == 6:
+            return "reload"
+
+    return None
 
 
 def validate_survey_draft(survey: dict, silent: bool = False) -> dict:

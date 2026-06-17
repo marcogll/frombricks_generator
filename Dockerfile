@@ -17,4 +17,4 @@ ENV FLASK_DEBUG=0
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:23457/ || exit 1
 
-CMD ["python", "web/app.py"]
+CMD ["python", "main.py", "serve"]

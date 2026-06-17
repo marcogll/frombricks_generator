@@ -1,0 +1,23 @@
+# Formbricks Studio Configuration
+#
+# Each environment connects to a Formbricks instance.
+# You can set default FORMBRICKS_BASE_URL and FORMBRICKS_API_KEY
+# in your .env file, and they will be used as fallbacks here.
+
+[[environments]]
+name = "production"
+label = "Production"
+env_type = "prod"
+group = "My App"
+base_url = "https://app.formbricks.com"
+api_key = "fbk_YOUR_API_KEY"
+environment_id = "env_YOUR_ENV_ID"
+
+[[environments]]
+name = "staging"
+label = "Staging"
+env_type = "staging"
+group = "My App"
+base_url = "https://staging.formbricks.com"
+api_key = "fbk_YOUR_API_KEY"
+environment_id = "env_YOUR_ENV_ID"

@@ -1,17 +1,39 @@
-# Lazy — Formbricks Studio
+<p align="center">
+  <a href="https://soul23.mx">
+    <picture>
+      <source
+        media="(prefers-color-scheme: dark)"
+        srcset="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo_wh.png">
+      <source
+        media="(prefers-color-scheme: light)"
+        srcset="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo_blk.png">
+      <img
+        src="https://raw.githubusercontent.com/marcogll/mg_data_storage/refs/heads/main/soul23/logo/soul23_logo_blk.png"
+        width="110"
+        alt="Soul:23">
+    </picture>
+  </a>
+</p>
 
-Visual survey builder & CLI manager for **Formbricks** via the Management API.
+<h1 align="center">Formbricks Studio</h1>
 
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3a3a3a?style=flat-square)
-![Formbricks API](https://img.shields.io/badge/Formbricks-API-3a3a3a?style=flat-square)
-![Rich TUI](https://img.shields.io/badge/Rich-TUI-3a3a3a?style=flat-square)
-![Flask Web UI](https://img.shields.io/badge/Flask-Web_UI-3a3a3a?style=flat-square)
-![Dark Theme](https://img.shields.io/badge/Dark_%2FLight-Theme-3a3a3a?style=flat-square)
-![Docker Ready](https://img.shields.io/badge/Docker-Ready-3a3a3a?style=flat-square)
+<p align="center">
+  Visual survey builder & CLI manager for Formbricks via the Management API.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3a3a3a?style=flat-square&logo=python&logoColor=white">
+  <img src="https://img.shields.io/badge/Flask-3a3a3a?style=flat-square&logo=flask&logoColor=white">
+  <img src="https://img.shields.io/badge/Docker-3a3a3a?style=flat-square&logo=docker&logoColor=white">
+</p>
 
 ---
 
-*made by & for lazy people who don't like repetitive tasks*
+## Description
+
+Visual survey builder & CLI manager for Formbricks via the Management API: Web UI with dark/light themes, template gallery and JSON import with auto-fix, interactive TUI with Rich, headless CLI for scripting, multi-environment management and survey lifecycle control (list, create, view, edit, clone), plus an evaluation module that grades responses against an answer key with CSV/JSON export.
+
+Python 3.10+, Flask, Docker-ready.
 
 ## Features
 
